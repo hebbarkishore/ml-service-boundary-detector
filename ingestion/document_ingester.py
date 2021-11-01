@@ -1,21 +1,3 @@
-"""
-ingestion/document_ingester.py
-───────────────────────────────
-Ingests requirements specs, architecture docs, API contracts, and any
-other text documents placed in the docs_input/ folder (or supplied via API).
-
-Supported formats:   PDF, DOCX, Markdown (.md), plain text (.txt), HTML
-Output:              List[DocumentChunk] – cleaned text chunks + extracted
-                     domain terms that enrich the semantic vocabulary used
-                     by the ML ranking model.
-
-Design note:
-  Documents are NOT used as ground truth labels – they enrich the TF-IDF
-  and Word2Vec corpora so that business-domain terminology in method names
-  aligns with domain concepts in the docs.  This mimics how an architect
-  would cross-reference the codebase with the domain model.
-"""
-
 import logging
 import os
 import re
