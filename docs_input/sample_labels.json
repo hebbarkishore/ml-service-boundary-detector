@@ -1,0 +1,35 @@
+[
+  {
+    "comp_a": "com.test.order.OrderController",
+    "comp_b": "com.test.payment.PaymentService",
+    "label": 1,
+    "_comment": "1 = valid boundary (these belong in separate services)"
+  },
+  {
+    "comp_a": "com.test.order.OrderService",
+    "comp_b": "com.test.order.OrderRepository",
+    "label": 0,
+    "_comment": "0 = keep together (same Order service domain)"
+  },
+  {
+    "comp_a": "com.test.order.OrderController",
+    "comp_b": "com.test.inventory.InventoryService",
+    "label": 1
+  },
+  {
+    "comp_a": "com.test.payment.PaymentService",
+    "comp_b": "com.test.payment.PaymentGatewayClient",
+    "label": 0
+  },
+  {
+    "comp_a": "com.test.inventory.InventoryService",
+    "comp_b": "com.test.inventory.InventoryRepository",
+    "label": 0
+  },
+  {
+    "comp_a": "com.test.notification.NotificationService",
+    "comp_b": "com.test.order.OrderRepository",
+    "label": 1,
+    "_comment": "Cross-layer coupling: Notification should not reach OrderRepository directly"
+  }
+]
