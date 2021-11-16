@@ -1,25 +1,4 @@
-"""
-ml/feature_engineering.py
-──────────────────────────
-Fuses the three signal channels (structural, behavioral, evolutionary) into
-a unified PairFeatures matrix that the ranking model consumes.
 
-For every candidate component-pair (A, B) this module:
-  1. Looks up the structural features (TF-IDF sim, semantic sim, edge weight, etc.)
-  2. Merges behavioral features if runtime traces were provided
-  3. Merges evolutionary features from git co-change
-  4. Computes cross-layer flags from domain hints
-  5. Returns a list of PairFeatures objects ready for ML training / inference
-
-Pair sampling strategy
-──────────────────────
-For a codebase of N components the full pair space is O(N²).
-We sample using three heuristics (union):
-  a. ALL pairs that share at least one direct dependency edge (neighbours in the graph)
-  b. Top-K semantically similar pairs per component (by TF-IDF cosine)
-  c. All pairs appearing in behavioral or evolutionary signals
-This keeps the candidate set tractable while ensuring no signal is missed.
-"""
 
 import logging
 import os

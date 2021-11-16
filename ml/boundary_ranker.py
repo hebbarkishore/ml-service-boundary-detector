@@ -1,4 +1,5 @@
 
+
 import logging
 import os
 import sys
@@ -225,7 +226,9 @@ class BoundaryRanker:
             for p in pairs
         ]
         behav_norm = safe_norm(behav_raw)
-        
+
+        # Evolutionary: HIGH co-change = LOW boundary signal (they evolve together)
+        # INVERT: if they always change together, they may belong in the same service
         evol_raw = [
             (1.0 - p.logical_coupling_score) * 0.5 +
             (1.0 - p.co_change_frequency) * 0.3 +
