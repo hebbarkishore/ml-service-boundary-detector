@@ -11,7 +11,6 @@ from core.models import DocumentChunk
 
 log = logging.getLogger(__name__)
 
-# ── Optional heavy parsers (graceful degradation) ─────────────────────────────
 try:
     from pdfminer.high_level import extract_text as pdf_extract
     _HAS_PDF = True
