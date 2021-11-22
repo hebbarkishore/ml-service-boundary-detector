@@ -6,10 +6,6 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Code-level units
-# ─────────────────────────────────────────────────────────────────────────────
-
 @dataclass
 class CodeUnit:
     """
@@ -24,12 +20,12 @@ class CodeUnit:
     class_names:  List[str] = field(default_factory=list)
     method_names: List[str] = field(default_factory=list)
     imports:      List[str] = field(default_factory=list)
-    annotations:  List[str] = field(default_factory=list)   # @Service, @Controller …
-    comments:     str = ""                                  # docstrings + inline
-    raw_tokens:   List[str] = field(default_factory=list)   # camelCase-split tokens
+    annotations:  List[str] = field(default_factory=list)   
+    comments:     str = ""                                 
+    raw_tokens:   List[str] = field(default_factory=list)   
 
 
-    domain_hints: List[str] = field(default_factory=list)   # "service", "repo", …
+    domain_hints: List[str] = field(default_factory=list)   
 
 
     cyclomatic_complexity: float = 0.0
@@ -97,10 +93,8 @@ class PairFeatures:
     betweenness_a:  float = 0.0
     betweenness_b:  float = 0.0
 
-    # Cross-layer indicator (e.g. controller ↔ repository without service in between)
     cross_layer_flag: int = 0
 
-    # Ground truth label (1 = valid boundary, 0 = should stay together)
     label: Optional[int] = None
 
     def to_feature_vector(self) -> List[float]:
