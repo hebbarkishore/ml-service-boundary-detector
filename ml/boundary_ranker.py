@@ -1,5 +1,3 @@
-
-
 import logging
 import os
 import sys
@@ -42,33 +40,14 @@ log = logging.getLogger(__name__)
 _MODEL_PATH = MODEL_DIR / "boundary_ranker.joblib"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Boundary Ranker
-# ─────────────────────────────────────────────────────────────────────────────
-
 class BoundaryRanker:
-    """
-    Trains (optional) and applies the boundary ranking model.
-
-    Usage – supervised
-    ------------------
-    ranker = BoundaryRanker()
-    ranker.train(labelled_pairs)
-    candidates = ranker.rank(all_pairs)
-
-    Usage – unsupervised
-    --------------------
-    ranker = BoundaryRanker()
-    candidates = ranker.rank_unsupervised(all_pairs)
-    """
-
+   
     def __init__(self):
         self._pipeline: Optional[Pipeline]  = None
         self._is_trained: bool              = False
         self._feature_importances: Dict     = {}
 
-    # ── Training ──────────────────────────────────────────────────────────────
-
+   
     def train(
         self,
         pairs: List[PairFeatures],
@@ -79,7 +58,7 @@ class BoundaryRanker:
         Returns a dict of training metrics.
         """
         labelled = [p for p in pairs if p.label is not None]
-        if len(labelled) < 20:
+        if len(labelled) < 35:
             log.warning(
                 "Only %d labelled samples available – supervised training skipped. "
                 "Use rank_unsupervised() instead.", len(labelled)
@@ -93,7 +72,7 @@ class BoundaryRanker:
                  len(labelled), y.sum(), (y == 0).sum())
 
         # SMOTE for class imbalance
-        if _HAS_SMOTE and y.sum() >= 3 and (y == 0).sum() >= 3:
+        if _HAS_SMOTE and y.sum() >= 4 and (y == 0).sum() >= 4:
             smote = SMOTE(random_state=RANDOM_STATE, k_neighbors=min(3, y.sum()-1))
             try:
                 X, y = smote.fit_resample(X, y)
@@ -116,7 +95,6 @@ class BoundaryRanker:
         self._pipeline.fit(X, y)
         self._is_trained = True
 
-        # Feature importances (GBT native)
         importances = gb.feature_importances_
         feat_names  = PairFeatures.feature_names()
         self._feature_importances = dict(
@@ -165,7 +143,6 @@ class BoundaryRanker:
             return True
         return False
 
-    # ── Supervised ranking ────────────────────────────────────────────────────
 
     def rank(self, pairs: List[PairFeatures]) -> List[BoundaryCandidate]:
         """
