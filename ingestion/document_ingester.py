@@ -1,3 +1,21 @@
+"""
+ingestion/document_ingester.py
+───────────────────────────────
+Ingests requirements specs, architecture docs, API contracts, and any
+other text documents placed in the docs_input/ folder (or supplied via API).
+
+Supported formats:   PDF, DOCX, Markdown (.md), plain text (.txt), HTML
+Output:              List[DocumentChunk] – cleaned text chunks + extracted
+                     domain terms that enrich the semantic vocabulary used
+                     by the ML ranking model.
+
+Design note:
+  Documents are NOT used as ground truth labels – they enrich the TF-IDF
+  and Word2Vec corpora so that business-domain terminology in method names
+  aligns with domain concepts in the docs.  This mimics how an architect
+  would cross-reference the codebase with the domain model.
+"""
+
 import logging
 import os
 import re
@@ -11,6 +29,7 @@ from core.models import DocumentChunk
 
 log = logging.getLogger(__name__)
 
+# ── Optional heavy parsers (graceful degradation) ─────────────────────────────
 try:
     from pdfminer.high_level import extract_text as pdf_extract
     _HAS_PDF = True
@@ -38,6 +57,9 @@ except ImportError:
     _HAS_MD = False
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Cleaning utilities
+# ─────────────────────────────────────────────────────────────────────────────
 
 _WS_RE    = re.compile(r"\s+")
 _PUNCT_RE = re.compile(r"[^A-Za-z0-9\s\-_./]")
@@ -48,10 +70,10 @@ def _clean(text: str) -> str:
     return _WS_RE.sub(" ", text).strip()
 
 
-def _chunk_text(text: str, chunk_size: int = 200, overlap: int = 50) -> List[str]:
+def _chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
     """
     Split long text into overlapping word-chunks for embedding.
-    chunk_size = 200 words is a reasonable balance for 2021-era Word2Vec models.
+    chunk_size = 500 words is a reasonable balance for 2021-era Word2Vec models.
     """
     words  = text.split()
     chunks = []
@@ -62,6 +84,10 @@ def _chunk_text(text: str, chunk_size: int = 200, overlap: int = 50) -> List[str
         start += chunk_size - overlap
     return [c for c in chunks if len(c.split()) > 10]
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Format-specific extractors
+# ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_pdf(path: str) -> str:
     if not _HAS_PDF:
@@ -129,6 +155,9 @@ _EXTRACTORS = {
 }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Doc-type heuristic
+# ─────────────────────────────────────────────────────────────────────────────
 
 _DOC_TYPE_SIGNALS = {
     "requirements":  re.compile(r"requirement|shall|must|user.stor|acceptance", re.I),
@@ -139,7 +168,7 @@ _DOC_TYPE_SIGNALS = {
 }
 
 
-def _classify_doc_type_(text: str, filename: str) -> str:
+def _classify_doc_type(text: str, filename: str) -> str:
     sample = (filename + " " + text[:500]).lower()
     for dtype, pat in _DOC_TYPE_SIGNALS.items():
         if pat.search(sample):
@@ -147,6 +176,9 @@ def _classify_doc_type_(text: str, filename: str) -> str:
     return "general"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Main ingester class
+# ─────────────────────────────────────────────────────────────────────────────
 
 class DocumentIngester:
     """
@@ -159,6 +191,7 @@ class DocumentIngester:
     def __init__(self, docs_folder: Optional[str] = None):
         self._docs_folder = docs_folder or str(DOCS_DIR)
 
+    # ── Public ────────────────────────────────────────────────────────────────
 
     def ingest_folder(self) -> List[DocumentChunk]:
         """Scan the configured docs folder and return all chunks."""
@@ -196,7 +229,7 @@ class DocumentIngester:
             return []
 
         raw_text  = extractor(path)
-        if not raw_text or len(raw_text.strip()) < 10:
+        if not raw_text or len(raw_text.strip()) < 50:
             log.debug("Empty or too-short extraction from %s", path)
             return []
 

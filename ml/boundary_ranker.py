@@ -41,13 +41,27 @@ _MODEL_PATH = MODEL_DIR / "boundary_ranker.joblib"
 
 
 class BoundaryRanker:
-   
+    """
+    Trains (optional) and applies the boundary ranking model.
+
+    Usage - supervised
+    ------------------
+    ranker = BoundaryRanker()
+    ranker.train(labelled_pairs)
+    candidates = ranker.rank(all_pairs)
+
+    Usage - unsupervised
+    --------------------
+    ranker = BoundaryRanker()
+    candidates = ranker.rank_unsupervised(all_pairs)
+    """
+
     def __init__(self):
         self._pipeline: Optional[Pipeline]  = None
         self._is_trained: bool              = False
         self._feature_importances: Dict     = {}
 
-   
+
     def train(
         self,
         pairs: List[PairFeatures],
@@ -58,7 +72,7 @@ class BoundaryRanker:
         Returns a dict of training metrics.
         """
         labelled = [p for p in pairs if p.label is not None]
-        if len(labelled) < 35:
+        if len(labelled) < 20:
             log.warning(
                 "Only %d labelled samples available – supervised training skipped. "
                 "Use rank_unsupervised() instead.", len(labelled)
@@ -71,8 +85,7 @@ class BoundaryRanker:
         log.info("Training on %d labelled pairs (pos=%d, neg=%d) …",
                  len(labelled), y.sum(), (y == 0).sum())
 
-        # SMOTE for class imbalance
-        if _HAS_SMOTE and y.sum() >= 4 and (y == 0).sum() >= 4:
+        if _HAS_SMOTE and y.sum() >= 3 and (y == 0).sum() >= 3:
             smote = SMOTE(random_state=RANDOM_STATE, k_neighbors=min(3, y.sum()-1))
             try:
                 X, y = smote.fit_resample(X, y)
@@ -101,7 +114,6 @@ class BoundaryRanker:
             sorted(zip(feat_names, importances), key=lambda x: x[1], reverse=True)
         )
 
-        # Cross-validation metrics
         metrics = {}
         if len(set(y)) >= 2 and len(y) >= cv_folds * 2:
             cv = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=RANDOM_STATE)
@@ -171,22 +183,20 @@ class BoundaryRanker:
 
         return sorted(candidates, key=lambda c: c.boundary_score, reverse=True)
 
-    # ── Unsupervised ranking ──────────────────────────────────────────────────
+
 
     def rank_unsupervised(self, pairs: List[PairFeatures]) -> List[BoundaryCandidate]:
         """
         Compute a weighted composite score without any labelled data.
         Higher score = stronger boundary signal (components should be separated).
         """
-        # Normalise each signal channel to [0,1] across all pairs
+
         def safe_norm(vals):
             arr = np.array(vals, dtype=np.float32)
             rng = arr.max() - arr.min()
             return (arr - arr.min()) / rng if rng > 1e-9 else arr * 0
 
-        # Structural: HIGH cosine similarity = LOW boundary signal (they belong together)
-        #             HIGH coupling weight   = depends on interpretation
-        # We treat high coupling AS a boundary candidate (tight coupling across contexts)
+
         struct_raw = [
             p.structural_coupling_weight * 0.4 +
             (1.0 - p.tfidf_cosine_similarity) * 0.4 +
@@ -195,7 +205,7 @@ class BoundaryRanker:
         ]
         struct_norm = safe_norm(struct_raw)
 
-        # Behavioral: HIGH call frequency across different layers = boundary signal
+
         behav_raw = [
             p.runtime_call_frequency * 0.5 +
             p.temporal_affinity * 0.3 +
@@ -204,8 +214,7 @@ class BoundaryRanker:
         ]
         behav_norm = safe_norm(behav_raw)
 
-        # Evolutionary: HIGH co-change = LOW boundary signal (they evolve together)
-        # INVERT: if they always change together, they may belong in the same service
+
         evol_raw = [
             (1.0 - p.logical_coupling_score) * 0.5 +
             (1.0 - p.co_change_frequency) * 0.3 +
@@ -242,7 +251,7 @@ class BoundaryRanker:
 
         return sorted(candidates, key=lambda c: c.boundary_score, reverse=True)
 
-    # ── HDBSCAN cluster-based service groupings ───────────────────────────────
+
 
     def suggest_clusters(
         self,
@@ -282,7 +291,7 @@ class BoundaryRanker:
             clusters.setdefault(int(label), []).append(uid)
         return clusters
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+
 
     def _build_rationale(self, pair: PairFeatures, prob: float) -> Dict[str, float]:
         if not self._feature_importances:

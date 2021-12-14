@@ -15,8 +15,7 @@ from config import MAX_PAIRS_PER_COMPONENT
 
 log = logging.getLogger(__name__)
 
-# Layers considered "distant" – a direct edge between them with no intermediary
-# is a cross-layer coupling smell
+
 _DISTANT_PAIRS = {
     frozenset({"controller", "repository"}),
     frozenset({"controller", "model"}),
@@ -48,7 +47,7 @@ class FeatureEngineer:
         self._behavioral = behavioral or {}
         self._evol       = evolutionary or {}
 
-    # ── Public ────────────────────────────────────────────────────────────────
+
 
     def build_pairs(
         self,
@@ -72,41 +71,41 @@ class FeatureEngineer:
         log.info("Built %d PairFeatures objects.", len(result))
         return result
 
-    # ── Pair sampling ─────────────────────────────────────────────────────────
+
 
     def _sample_candidates(self) -> Set[Tuple[str, str]]:
         candidates: Set[Tuple[str, str]] = set()
         n = len(self._units)
         uid_list = [u.unit_id for u in self._units]
 
-        # (a) Graph neighbours
+
         for u, v in self._graph.edges():
             if u in self._uid2idx and v in self._uid2idx:
                 candidates.add((min(u,v), max(u,v)))
 
-        # (b) Top-K TF-IDF similar pairs per component
+
         k = min(MAX_PAIRS_PER_COMPONENT, n - 1)
         if self._cos.shape[0] == n:
             for i in range(n):
                 top_j = np.argsort(self._cos[i])[::-1][1:k+1]
                 for j in top_j:
-                    if self._cos[i, j] > 0.05:   # ignore near-zero similarity
+                    if self._cos[i, j] > 0.05:   
                         a, b = uid_list[i], uid_list[j]
                         candidates.add((min(a,b), max(a,b)))
 
-        # (c) Pairs in behavioral signal
+
         for (a, b) in self._behavioral:
             candidates.add((min(a,b), max(a,b)))
 
-        # (d) Pairs in evolutionary signal
+
         for (a, b) in self._evol:
             candidates.add((min(a,b), max(a,b)))
 
-        # Filter: both endpoints must be known units
+
         uid_set = {u.unit_id for u in self._units}
         return {(a,b) for (a,b) in candidates if a in uid_set and b in uid_set and a != b}
 
-    # ── Feature construction for a single pair ────────────────────────────────
+
 
     def _build_one(self, a: str, b: str) -> PairFeatures:
         ia = self._uid2idx.get(a, -1)
@@ -116,8 +115,7 @@ class FeatureEngineer:
 
         pf = PairFeatures(comp_a=a, comp_b=b)
 
-        # ── Structural ────────────────────────────────────────────────────────
-        # Edge weight (bidirectional max)
+
         w_ab = self._graph[a][b]["weight"] if self._graph.has_edge(a, b) else 0
         w_ba = self._graph[b][a]["weight"] if self._graph.has_edge(b, a) else 0
         pf.structural_coupling_weight = float(max(w_ab, w_ba))
@@ -130,26 +128,26 @@ class FeatureEngineer:
         if ia >= 0 and ib >= 0 and self._sem.shape[0] > max(ia, ib):
             pf.semantic_similarity = float(self._sem[ia, ib])
 
-        # Shared imports
+
         if ua and ub:
             set_a = set(ua.imports)
             set_b = set(ub.imports)
             pf.shared_import_count    = len(set_a & set_b)
             pf.shared_annotation_count = len(set(ua.annotations) & set(ub.annotations))
 
-        # Inheritance edge
+
         pf.inheritance_linked = int(
             self._graph.has_edge(a, b) and
             self._graph[a][b].get("kind", "") == "inheritance"
         )
 
-        # Centrality
+
         pf.pagerank_a    = self._central.get(a, {}).get("pagerank", 0.0)
         pf.pagerank_b    = self._central.get(b, {}).get("pagerank", 0.0)
         pf.betweenness_a = self._central.get(a, {}).get("betweenness", 0.0)
         pf.betweenness_b = self._central.get(b, {}).get("betweenness", 0.0)
 
-        # Cross-layer flag
+
         if ua and ub:
             layers_a = set(ua.domain_hints)
             layers_b = set(ub.domain_hints)
@@ -158,7 +156,7 @@ class FeatureEngineer:
                     pf.cross_layer_flag = 1
                     break
 
-        # ── Behavioral ────────────────────────────────────────────────────────
+
         beh_key = (min(a,b), max(a,b))
         beh_fwd = self._behavioral.get((a,b), {})
         beh_rev = self._behavioral.get((b,a), {})
@@ -168,7 +166,7 @@ class FeatureEngineer:
             pf.runtime_call_depth     = beh.get("runtime_call_depth",     0.0)
             pf.temporal_affinity      = beh.get("temporal_affinity",      0.0)
 
-        # ── Evolutionary ──────────────────────────────────────────────────────
+
         evol_key = (min(a,b), max(a,b))
         evol     = self._evol.get(evol_key, self._evol.get((a,b), self._evol.get((b,a), {})))
         if evol:
