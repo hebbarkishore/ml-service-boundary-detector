@@ -230,7 +230,6 @@ class BoundaryRanker:
                 BEHAVIORAL_WEIGHT  * float(behav_norm[i]) +
                 EVOLUTIONARY_WEIGHT* float(evol_norm[i])
             )
-            # Cross-layer flag bumps score regardless
             if pair.cross_layer_flag:
                 score = min(1.0, score + 0.15)
 
@@ -269,7 +268,6 @@ class BoundaryRanker:
 
         try:
             from sklearn.decomposition import TruncatedSVD
-            # Reduce dimensionality before HDBSCAN (cosine on sparse TF-IDF is slow)
             n_components = min(50, tfidf_matrix.shape[1] - 1, tfidf_matrix.shape[0] - 1)
             if n_components < 2:
                 return {}

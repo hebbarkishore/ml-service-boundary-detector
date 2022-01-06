@@ -1,21 +1,3 @@
-"""
-ingestion/document_ingester.py
-───────────────────────────────
-Ingests requirements specs, architecture docs, API contracts, and any
-other text documents placed in the docs_input/ folder (or supplied via API).
-
-Supported formats:   PDF, DOCX, Markdown (.md), plain text (.txt), HTML
-Output:              List[DocumentChunk] – cleaned text chunks + extracted
-                     domain terms that enrich the semantic vocabulary used
-                     by the ML ranking model.
-
-Design note:
-  Documents are NOT used as ground truth labels – they enrich the TF-IDF
-  and Word2Vec corpora so that business-domain terminology in method names
-  aligns with domain concepts in the docs.  This mimics how an architect
-  would cross-reference the codebase with the domain model.
-"""
-
 import logging
 import os
 import re
@@ -29,7 +11,6 @@ from core.models import DocumentChunk
 
 log = logging.getLogger(__name__)
 
-# ── Optional heavy parsers (graceful degradation) ─────────────────────────────
 try:
     from pdfminer.high_level import extract_text as pdf_extract
     _HAS_PDF = True
@@ -57,9 +38,6 @@ except ImportError:
     _HAS_MD = False
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Cleaning utilities
-# ─────────────────────────────────────────────────────────────────────────────
 
 _WS_RE    = re.compile(r"\s+")
 _PUNCT_RE = re.compile(r"[^A-Za-z0-9\s\-_./]")
@@ -84,10 +62,6 @@ def _chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str
         start += chunk_size - overlap
     return [c for c in chunks if len(c.split()) > 10]
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Format-specific extractors
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_pdf(path: str) -> str:
     if not _HAS_PDF:
@@ -122,12 +96,12 @@ def _extract_markdown(path: str) -> str:
     if _HAS_MD and _HAS_BS4:
         html = _md_lib.markdown(raw)
         return BeautifulSoup(html, "html.parser").get_text(separator=" ")
-    # Fallback: strip markdown syntax manually
-    raw = re.sub(r"#{1,6}\s+", "", raw)         # headings
-    raw = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", raw)  # bold/italic
-    raw = re.sub(r"`{1,3}[^`]*`{1,3}", " ", raw)        # code spans
-    raw = re.sub(r"!\[.*?\]\(.*?\)", " ", raw)           # images
-    raw = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", raw)  # links
+
+    raw = re.sub(r"#{1,6}\s+", "", raw)         
+    raw = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", raw)  
+    raw = re.sub(r"`{1,3}[^`]*`{1,3}", " ", raw)        
+    raw = re.sub(r"!\[.*?\]\(.*?\)", " ", raw)          
+    raw = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", raw)  
     return raw
 
 
@@ -155,9 +129,6 @@ _EXTRACTORS = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Doc-type heuristic
-# ─────────────────────────────────────────────────────────────────────────────
 
 _DOC_TYPE_SIGNALS = {
     "requirements":  re.compile(r"requirement|shall|must|user.stor|acceptance", re.I),
@@ -176,9 +147,6 @@ def _classify_doc_type(text: str, filename: str) -> str:
     return "general"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Main ingester class
-# ─────────────────────────────────────────────────────────────────────────────
 
 class DocumentIngester:
     """
@@ -191,7 +159,6 @@ class DocumentIngester:
     def __init__(self, docs_folder: Optional[str] = None):
         self._docs_folder = docs_folder or str(DOCS_DIR)
 
-    # ── Public ────────────────────────────────────────────────────────────────
 
     def ingest_folder(self) -> List[DocumentChunk]:
         """Scan the configured docs folder and return all chunks."""
@@ -219,7 +186,6 @@ class DocumentIngester:
         """Return plain texts suitable for Word2Vec / TF-IDF augmentation."""
         return [c.text for c in chunks if c.text.strip()]
 
-    # ── Internals ─────────────────────────────────────────────────────────────
 
     def _process_file(self, path: str) -> List[DocumentChunk]:
         ext       = Path(path).suffix.lower()

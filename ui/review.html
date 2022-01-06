@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Service Boundary Detector - Architectural Review</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #0f1117;
+    --bg2:         #1a1d27;
+    --bg3:         #22263a;
+    --border:      #2e3250;
+    --accent:      #4f8ef7;
+    --accent2:     #7c5cfc;
+    --green:       #22c55e;
+    --red:         #ef4444;
+    --yellow:      #f59e0b;
+    --text:        #e2e8f0;
+    --text2:       #94a3b8;
+    --text3:       #64748b;
+    --card-radius: 12px;
+    --font:        'Segoe UI', system-ui, sans-serif;
+    --mono:        'Cascadia Code', 'Fira Code', monospace;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ───────────────────────────────────────────────────────────── */
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text);
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .header-stats {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.82rem;
+    color: var(--text2);
+  }
+  .stat-pill {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .stat-pill .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  /* ── Layout ───────────────────────────────────────────────────────────── */
+  .layout {
+    display: flex;
+    flex: 1;
+    min-height: calc(100vh - 60px);
+  }
+
+  /* ── Sidebar ──────────────────────────────────────────────────────────── */
+  .sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    padding: 1.5rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+  }
+  .sidebar-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text3);
+    padding: 0 0.5rem;
+  }
+  .cluster-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .cluster-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--text2);
+    transition: background 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cluster-item:hover, .cluster-item.active {
+    background: var(--bg3);
+    color: var(--text);
+  }
+  .cluster-badge {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.72rem;
+    padding: 1px 7px;
+    margin-left: auto;
+    color: var(--text3);
+  }
+  .cluster-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── Main panel ───────────────────────────────────────────────────────── */
+  .main {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  /* ── Page title bar ───────────────────────────────────────────────────── */
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .page-title { font-size: 1.4rem; font-weight: 700; }
+  .page-sub   { font-size: 0.85rem; color: var(--text2); margin-top: 2px; }
+
+  .actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    font-family: var(--font);
+    transition: opacity 0.15s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover   { opacity: 0.88; }
+  .btn:active  { transform: scale(0.97); }
+  .btn-primary { background: var(--accent);  color: #fff; }
+  .btn-success { background: var(--green);   color: #fff; }
+  .btn-danger  { background: var(--red);     color: #fff; }
+  .btn-ghost   {
+    background: var(--bg3);
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Progress bar ─────────────────────────────────────────────────────── */
+  .progress-section {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    padding: 1.25rem 1.5rem;
+  }
+  .progress-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: var(--text2);
+    margin-bottom: 0.6rem;
+  }
+  .progress-bar-wrap {
+    background: var(--bg3);
+    border-radius: 99px;
+    height: 8px;
+    overflow: hidden;
+    display: flex;
+    gap: 2px;
+  }
+  .progress-fill-accept {
+    background: var(--green);
+    height: 100%;
+    border-radius: 99px 0 0 99px;
+    transition: width 0.4s ease;
+  }
+  .progress-fill-reject {
+    background: var(--red);
+    height: 100%;
+    border-radius: 0 99px 99px 0;
+    transition: width 0.4s ease;
+  }
+  .progress-counts {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 0.75rem;
+    font-size: 0.82rem;
+  }
+  .count-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text2);
+  }
+  .count-chip strong { color: var(--text); }
+
+  /* ── Filter bar ───────────────────────────────────────────────────────── */
+  .filter-bar {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .filter-btn {
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text2);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: var(--font);
+    transition: all 0.15s;
+  }
+  .filter-btn.active, .filter-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .search-input {
+    margin-left: auto;
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 0.82rem;
+    font-family: var(--font);
+    width: 220px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--text3); }
+
+  /* ── Candidate cards ──────────────────────────────────────────────────── */
+  .candidates-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .candidate-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    padding: 1.25rem 1.5rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .candidate-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 4px 0 0 4px;
+  }
+  .candidate-card.unreviewed::before { background: var(--border); }
+  .candidate-card.accepted::before   { background: var(--green); }
+  .candidate-card.rejected::before   { background: var(--red); }
+  .candidate-card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent)22;
+  }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .card-components {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+  .component-chip {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text);
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .arrow-icon { color: var(--text3); font-size: 1.1rem; }
+
+  .score-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .score-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .score-label { font-size: 0.72rem; color: var(--text3); }
+
+  /* Score colour */
+  .score-high  { color: var(--red); }
+  .score-mid   { color: var(--yellow); }
+  .score-low   { color: var(--green); }
+
+  .mini-bar-wrap {
+    background: var(--bg3);
+    border-radius: 99px;
+    height: 5px;
+    width: 80px;
+    overflow: hidden;
+    margin-top: 2px;
+  }
+  .mini-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.3s;
+  }
+
+  /* ── Signal breakdown ─────────────────────────────────────────────────── */
+  .signal-row {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+  .signal-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg3);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    color: var(--text2);
+    flex: 1;
+    min-width: 140px;
+  }
+  .signal-icon { font-size: 1rem; }
+  .signal-bar-wrap {
+    flex: 1;
+    background: var(--bg);
+    border-radius: 99px;
+    height: 4px;
+    overflow: hidden;
+  }
+  .signal-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--accent);
+  }
+  .signal-val { font-weight: 600; color: var(--text); font-size: 0.8rem; }
+
+  /* ── Suggested service ────────────────────────────────────────────────── */
+  .suggestion-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 0.75rem;
+    font-size: 0.82rem;
+    color: var(--text2);
+  }
+  .suggestion-name {
+    background: linear-gradient(135deg, var(--accent)22, var(--accent2)22);
+    border: 1px solid var(--accent)44;
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--accent);
+  }
+
+  /* ── Rationale text input ─────────────────────────────────────────────── */
+  .rationale-section {
+    margin-top: 1rem;
+    display: none;
+  }
+  .rationale-section.open { display: block; }
+  .rationale-label {
+    font-size: 0.78rem;
+    color: var(--text3);
+    margin-bottom: 4px;
+  }
+  .rationale-input {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 0.82rem;
+    resize: vertical;
+    min-height: 60px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .rationale-input:focus { border-color: var(--accent); }
+
+  /* ── Decision buttons ─────────────────────────────────────────────────── */
+  .decision-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+  .btn-accept {
+    background: var(--green);
+    color: #fff;
+  }
+  .btn-reject {
+    background: var(--red);
+    color: #fff;
+  }
+  .btn-undo {
+    background: var(--bg3);
+    color: var(--text2);
+    border: 1px solid var(--border);
+  }
+  .decision-status {
+    margin-left: auto;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status-accepted { color: var(--green); }
+  .status-rejected { color: var(--red); }
+
+  /* ── Empty / loading states ───────────────────────────────────────────── */
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text2);
+  }
+  .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+  .empty-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .empty-sub { font-size: 0.85rem; color: var(--text3); }
+
+  .loading-spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toast notifications ──────────────────────────────────────────────── */
+  .toast-wrap {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 999;
+  }
+  .toast {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 8px 32px #0008;
+    animation: slideIn 0.25s ease;
+    max-width: 340px;
+  }
+  @keyframes slideIn { from { transform: translateX(120%); } to { transform: translateX(0); } }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error   { border-left: 3px solid var(--red); }
+  .toast.info    { border-left: 3px solid var(--accent); }
+
+  /* ── Right panel: summary ─────────────────────────────────────────────── */
+  .right-panel {
+    width: 260px;
+    min-width: 260px;
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    padding: 1.5rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    overflow-y: auto;
+  }
+  .panel-section-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text3);
+  }
+  .insight-card {
+    background: var(--bg3);
+    border-radius: 10px;
+    padding: 0.9rem;
+    font-size: 0.82rem;
+    color: var(--text2);
+    line-height: 1.5;
+  }
+  .insight-card strong { color: var(--text); display: block; margin-bottom: 3px; }
+
+  .feature-importance-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .fi-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: var(--text2);
+  }
+  .fi-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fi-bar-wrap {
+    width: 60px;
+    background: var(--bg);
+    border-radius: 99px;
+    height: 4px;
+    overflow: hidden;
+  }
+  .fi-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--accent2);
+  }
+  .fi-val { font-size: 0.72rem; color: var(--text3); width: 34px; text-align: right; }
+
+  /* ── Retrain banner ───────────────────────────────────────────────────── */
+  .retrain-banner {
+    background: linear-gradient(135deg, var(--accent)22, var(--accent2)22);
+    border: 1px solid var(--accent)44;
+    border-radius: var(--card-radius);
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .retrain-text { flex: 1; font-size: 0.85rem; color: var(--text2); }
+  .retrain-text strong { color: var(--text); }
+
+  /* ── Responsive ───────────────────────────────────────────────────────── */
+  @media (max-width: 1100px) { .right-panel { display: none; } }
+  @media (max-width: 780px)  { .sidebar    { display: none; } }
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⬡</div>
+    Service Boundary Detector
+  </div>
+  <div class="header-stats">
+    <div class="stat-pill">
+      <div class="dot" style="background:var(--green)"></div>
+      <span id="stat-accepted">0 accepted</span>
+    </div>
+    <div class="stat-pill">
+      <div class="dot" style="background:var(--red)"></div>
+      <span id="stat-rejected">0 rejected</span>
+    </div>
+    <div class="stat-pill">
+      <div class="dot" style="background:var(--yellow)"></div>
+      <span id="stat-pending">0 pending</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── Layout ──────────────────────────────────────────────────────────── -->
+<div class="layout">
+
+  <!-- Sidebar: cluster groupings -->
+  <aside class="sidebar">
+    <div class="sidebar-title">Service Clusters</div>
+    <div class="cluster-list" id="cluster-list">
+      <div class="cluster-item active" onclick="filterCluster(null, this)">
+        <div class="cluster-dot" style="background:var(--accent)"></div>
+        All Candidates
+        <span class="cluster-badge" id="all-badge">0</span>
+      </div>
+    </div>
+    <div class="sidebar-title" style="margin-top:1rem">Hotspots</div>
+    <div id="hotspot-list" style="font-size:0.78rem;color:var(--text3);padding:0 0.5rem;line-height:1.8"></div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- Page header -->
+    <div class="page-header">
+      <div>
+        <div class="page-title">Architectural Review</div>
+        <div class="page-sub">Review ML-ranked boundary candidates : Accept or Reject each pair</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" onclick="loadReport()">
+          ↻ Refresh
+        </button>
+        <button class="btn btn-ghost" id="export-btn" onclick="exportFeedback()">
+          ↓ Export Labels
+        </button>
+        <button class="btn btn-primary" id="retrain-btn" onclick="triggerRetrain()" style="display:none">
+          ⚡ Retrain Model
+        </button>
+      </div>
+    </div>
+
+    <!-- Retrain banner (shown when enough labels collected) -->
+    <div class="retrain-banner" id="retrain-banner" style="display:none">
+      <span style="font-size:1.5rem">=></span>
+      <div class="retrain-text">
+        <strong>Enough labels collected!</strong><br>
+        You have labelled sufficient pairs to train the supervised model.
+        Retraining will improve boundary precision by incorporating your decisions.
+      </div>
+      <button class="btn btn-primary" onclick="triggerRetrain()">⚡ Retrain Now</button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-section">
+      <div class="progress-row">
+        <span>Review Progress</span>
+        <span id="progress-text">0 of 0 reviewed</span>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-fill-accept" id="prog-accept" style="width:0%"></div>
+        <div class="progress-fill-reject" id="prog-reject" style="width:0%"></div>
+      </div>
+      <div class="progress-counts">
+        <div class="count-chip">
+          <div class="dot" style="background:var(--green);width:8px;height:8px;border-radius:50%"></div>
+          <strong id="count-accepted">0</strong> accepted
+        </div>
+        <div class="count-chip">
+          <div class="dot" style="background:var(--red);width:8px;height:8px;border-radius:50%"></div>
+          <strong id="count-rejected">0</strong> rejected
+        </div>
+        <div class="count-chip">
+          <div class="dot" style="background:var(--text3);width:8px;height:8px;border-radius:50%"></div>
+          <strong id="count-pending">0</strong> pending
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" onclick="setFilter('unreviewed', this)">Pending</button>
+      <button class="filter-btn" onclick="setFilter('accepted', this)">Accepted</button>
+      <button class="filter-btn" onclick="setFilter('rejected', this)">Rejected</button>
+      <input class="search-input" type="text" placeholder="Search components…"
+             oninput="onSearch(this.value)" id="search-box">
+    </div>
+
+    <!-- Candidates -->
+    <div class="candidates-grid" id="candidates-grid">
+      <div class="empty-state">
+        <div class="loading-spinner"></div>
+        <div style="margin-top:1rem;color:var(--text3)">Loading boundary candidates…</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Right panel -->
+  <aside class="right-panel">
+    <div class="panel-section-title">Summary</div>
+    <div id="summary-cards" style="display:flex;flex-direction:column;gap:0.75rem">
+      <div class="insight-card">
+        <strong>Units Scanned</strong>
+        <span id="rp-units">—</span>
+      </div>
+      <div class="insight-card">
+        <strong>Total Candidates</strong>
+        <span id="rp-total">—</span>
+      </div>
+      <div class="insight-card">
+        <strong>Model Mode</strong>
+        <span id="rp-mode">—</span>
+      </div>
+      <div class="insight-card">
+        <strong>Pipeline Time</strong>
+        <span id="rp-time">—</span>
+      </div>
+    </div>
+
+    <div class="panel-section-title">Feature Importances</div>
+    <div class="feature-importance-list" id="fi-list">
+      <div style="font-size:0.78rem;color:var(--text3)">Run supervised training to see importances.</div>
+    </div>
+
+    <div class="panel-section-title">Feedback Stats</div>
+    <div class="insight-card" id="feedback-stats-card">
+      <strong>Sufficient for training?</strong>
+      <span id="rp-sufficient">No (need ≥10 labels)</span>
+    </div>
+  </aside>
+
+</div>
+
+<!-- Toast container -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<!-- ── JavaScript ─────────────────────────────────────────────────────── -->
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let allCandidates   = [];
+let feedback        = {};     // { "A|||B": { label, rationale } }
+let clusters        = {};
+let featureImportances = {};
+let activeFilter    = 'all';
+let activeCluster   = null;
+let searchQuery     = '';
+let reportMeta      = {};
+
+const CLUSTER_COLORS = [
+  '#4f8ef7','#7c5cfc','#22c55e','#f59e0b','#ef4444',
+  '#06b6d4','#d946ef','#84cc16','#f97316','#64748b'
+];
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadReport();
+  loadFeedback();
+});
+
+// ── Load report from API ───────────────────────────────────────────────────
+async function loadReport() {
+  try {
+    const res  = await fetch('/api/v1/report');
+    if (!res.ok) {
+      showEmpty('No report available yet. Run the pipeline first from the CLI or API.');
+      return;
+    }
+    const data = await res.json();
+
+    allCandidates      = data.top_boundaries   || [];
+    clusters           = data.service_clusters  || {};
+    featureImportances = data.feature_importances || {};
+    reportMeta         = data.meta              || {};
+
+    renderSidebar();
+    renderRightPanel(data);
+    renderCandidates();
+    updateStats();
+  } catch (e) {
+    showEmpty('Failed to connect to API. Is the server running?');
+    console.error(e);
+  }
+}
+
+// ── Load existing feedback ─────────────────────────────────────────────────
+async function loadFeedback() {
+  try {
+    const res  = await fetch('/api/v1/feedback');
+    if (!res.ok) return;
+    const data = await res.json();
+    (data.entries || []).forEach(e => {
+      const key = canonicalKey(e.comp_a, e.comp_b);
+      feedback[key] = { label: e.label, rationale: e.rationale_text || '' };
+    });
+    renderCandidates();
+    updateStats();
+    checkRetrainReady(data.stats || {});
+  } catch (e) {
+    console.warn('Could not load feedback:', e);
+  }
+}
+
+// ── Render sidebar clusters ────────────────────────────────────────────────
+function renderSidebar() {
+  const list = document.getElementById('cluster-list');
+  list.innerHTML = `
+    <div class="cluster-item active" onclick="filterCluster(null, this)">
+      <div class="cluster-dot" style="background:var(--accent)"></div>
+      All Candidates
+      <span class="cluster-badge" id="all-badge">${allCandidates.length}</span>
+    </div>`;
+
+  Object.entries(clusters).forEach(([cid, members], idx) => {
+    if (cid === '-1') return;   // noise cluster
+    const color = CLUSTER_COLORS[idx % CLUSTER_COLORS.length];
+    const label = suggestClusterName(members);
+    list.innerHTML += `
+      <div class="cluster-item" onclick="filterCluster('${cid}', this)">
+        <div class="cluster-dot" style="background:${color}"></div>
+        ${label}
+        <span class="cluster-badge">${members.length}</span>
+      </div>`;
+  });
+}
+
+// ── Render right panel ─────────────────────────────────────────────────────
+function renderRightPanel(data) {
+  document.getElementById('rp-units').textContent =
+    data.units_scanned ?? (data.meta?.stages?.structural?.units ?? '—');
+  document.getElementById('rp-total').textContent = allCandidates.length;
+  document.getElementById('rp-mode').textContent  =
+    data.meta?.stages?.ranking?.mode ?? 'unsupervised';
+  document.getElementById('rp-time').textContent  =
+    data.meta?.total_elapsed_s ? `${data.meta.total_elapsed_s}s` : '—';
+
+  // Feature importances
+  const fiList = document.getElementById('fi-list');
+  const fiEntries = Object.entries(featureImportances);
+  if (fiEntries.length === 0) {
+    fiList.innerHTML = '<div style="font-size:0.78rem;color:var(--text3)">Run supervised training to see importances.</div>';
+  } else {
+    const max = Math.max(...fiEntries.map(e => e[1]));
+    fiList.innerHTML = fiEntries.slice(0, 8).map(([name, val]) => `
+      <div class="fi-row">
+        <div class="fi-name" title="${name}">${name.replace(/_/g,' ')}</div>
+        <div class="fi-bar-wrap">
+          <div class="fi-bar-fill" style="width:${Math.round(val/max*100)}%"></div>
+        </div>
+        <div class="fi-val">${(val*100).toFixed(1)}%</div>
+      </div>`).join('');
+  }
+
+  // Hotspots
+  const hs = (data.hotspots?.change_hotspots || []).slice(0, 5);
+  const hsList = document.getElementById('hotspot-list');
+  hsList.innerHTML = hs.length
+    ? hs.map(h => `<div>${shortName(h.unit_id)} <span style="color:var(--text2)">(${h.change_count})</span></div>`).join('')
+    : '<div>No git data available</div>';
+}
+
+// ── Render candidate cards ─────────────────────────────────────────────────
+function renderCandidates() {
+  const grid = document.getElementById('candidates-grid');
+  let visible = allCandidates.filter(c => {
+    const key    = canonicalKey(c.component_a, c.component_b);
+    const status = getStatus(key);
+    if (activeFilter === 'unreviewed' && status !== 'unreviewed') return false;
+    if (activeFilter === 'accepted'   && status !== 'accepted')   return false;
+    if (activeFilter === 'rejected'   && status !== 'rejected')   return false;
+    if (activeCluster !== null) {
+      const members = clusters[activeCluster] || [];
+      if (!members.includes(c.component_a) && !members.includes(c.component_b)) return false;
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (!c.component_a.toLowerCase().includes(q) &&
+          !c.component_b.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (visible.length === 0) {
+    grid.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">search</div>
+      <div class="empty-title">No candidates match</div>
+      <div class="empty-sub">Try adjusting the filter or search.</div>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = visible.map((c, i) => renderCard(c, i)).join('');
+}
+
+function renderCard(c, idx) {
+  const key      = canonicalKey(c.component_a, c.component_b);
+  const status   = getStatus(key);
+  const fb       = feedback[key] || {};
+  const score    = c.boundary_score || 0;
+  const scoreClass = score >= 0.65 ? 'score-high' : score >= 0.35 ? 'score-mid' : 'score-low';
+  const rat      = c.rationale || {};
+
+  const signalRows = [
+    { icon: '🏗️', label: 'Structural',   val: rat.structural_channel   ?? rat.tfidf_cosine_similarity   ?? 0 },
+    { icon: '⚡', label: 'Behavioral',   val: rat.behavioral_channel   ?? rat.runtime_call_frequency    ?? 0 },
+    { icon: '🕰️', label: 'Evolutionary', val: rat.evolutionary_channel ?? rat.logical_coupling_score   ?? 0 },
+  ];
+  const maxSig = Math.max(...signalRows.map(s => s.val), 0.001);
+
+  return `
+  <div class="candidate-card ${status}" id="card-${key.replace(/[^a-z0-9]/gi,'_')}">
+    <div class="card-top">
+      <div class="card-components">
+        <div class="component-chip" title="${c.component_a}">${shortName(c.component_a)}</div>
+        <div class="arrow-icon">⟷</div>
+        <div class="component-chip" title="${c.component_b}">${shortName(c.component_b)}</div>
+      </div>
+      <div class="score-badge">
+        <div class="score-value ${scoreClass}">${(score*100).toFixed(0)}<span style="font-size:0.8rem;font-weight:400">%</span></div>
+        <div class="score-label">boundary score</div>
+        <div class="mini-bar-wrap">
+          <div class="mini-bar-fill" style="width:${score*100}%;background:${score>=0.65?'var(--red)':score>=0.35?'var(--yellow)':'var(--green)'}"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="signal-row">
+      ${signalRows.map(s => `
+        <div class="signal-pill">
+          <span class="signal-icon">${s.icon}</span>
+          <span>${s.label}</span>
+          <div class="signal-bar-wrap">
+            <div class="signal-bar-fill" style="width:${Math.round(s.val/maxSig*100)}%"></div>
+          </div>
+          <span class="signal-val">${(s.val*100).toFixed(1)}%</span>
+        </div>`).join('')}
+    </div>
+
+    ${c.suggested_service ? `
+    <div class="suggestion-row">
+      💡 Suggested service:
+      <span class="suggestion-name">${c.suggested_service}</span>
+    </div>` : ''}
+
+    <div class="rationale-section ${status !== 'unreviewed' ? 'open' : ''}" id="rat-${key.replace(/[^a-z0-9]/gi,'_')}">
+      <div class="rationale-label">Architect note (optional):</div>
+      <textarea class="rationale-input" placeholder="Why did you make this decision?"
+        id="txt-${key.replace(/[^a-z0-9]/gi,'_')}">${fb.rationale || ''}</textarea>
+    </div>
+
+    <div class="decision-row">
+      ${status === 'unreviewed' ? `
+        <button class="btn btn-accept" onclick="decide('${c.component_a}','${c.component_b}',1,${score},${c.confidence||0})">
+          ✓ Accept Boundary
+        </button>
+        <button class="btn btn-reject" onclick="decide('${c.component_a}','${c.component_b}',0,${score},${c.confidence||0})">
+          ✗ Keep Together
+        </button>
+        <button class="btn btn-ghost" onclick="toggleRationale('${key.replace(/[^a-z0-9]/gi,'_')}')">
+          + Note
+        </button>
+      ` : `
+        <button class="btn btn-undo" onclick="undoDecision('${c.component_a}','${c.component_b}')">
+          ↩ Undo
+        </button>
+      `}
+      <div class="decision-status">
+        ${status === 'accepted'   ? '<span class="status-accepted">✓ Accepted</span>' : ''}
+        ${status === 'rejected'   ? '<span class="status-rejected">✗ Rejected</span>' : ''}
+        ${status === 'unreviewed' ? '<span style="color:var(--text3)">Pending review</span>' : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Decision actions ───────────────────────────────────────────────────────
+async function decide(compA, compB, label, score, confidence) {
+  const key     = canonicalKey(compA, compB);
+  const safeKey = key.replace(/[^a-z0-9]/gi,'_');
+  const txt     = document.getElementById(`txt-${safeKey}`);
+  const rationale = txt ? txt.value : '';
+
+  feedback[key] = { label, rationale };
+
+  try {
+    const res = await fetch('/api/v1/feedback', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        comp_a:         compA,
+        comp_b:         compB,
+        label:          label,
+        boundary_score: score,
+        confidence:     confidence,
+        rationale_text: rationale,
+      })
+    });
+    const data = await res.json();
+    showToast(
+      label === 1 ? '✓ Boundary accepted' : '✗ Marked: keep together',
+      label === 1 ? 'success' : 'error'
+    );
+    checkRetrainReady(data.stats || {});
+  } catch (e) {
+    showToast('Failed to save feedback', 'error');
+    console.error(e);
+  }
+
+  renderCandidates();
+  updateStats();
+}
+
+async function undoDecision(compA, compB) {
+  const key = canonicalKey(compA, compB);
+  delete feedback[key];
+
+  try {
+    await fetch('/api/v1/feedback/delete', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ comp_a: compA, comp_b: compB })
+    });
+    showToast('↩ Decision undone', 'info');
+  } catch (e) { console.warn(e); }
+
+  renderCandidates();
+  updateStats();
+}
+
+// ── Retrain ────────────────────────────────────────────────────────────────
+async function triggerRetrain() {
+  const btn = document.getElementById('retrain-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading-spinner"></span> Retraining…';
+
+  try {
+    const labels = Object.entries(feedback).map(([key, v]) => {
+      const [a, b] = key.split('|||');
+      return { comp_a: a, comp_b: b, label: v.label };
+    });
+    const res  = await fetch('/api/v1/train', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ labels })
+    });
+    const data = await res.json();
+    if (data.metrics?.cv_roc_auc_mean) {
+      showToast(`✓ Model retrained! CV AUC: ${(data.metrics.cv_roc_auc_mean*100).toFixed(1)}%`, 'success');
+    } else {
+      showToast('✓ Model retrained successfully', 'success');
+    }
+    await loadReport();
+  } catch (e) {
+    showToast('Retraining failed: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '⚡ Retrain Model';
+}
+
+// ── Export labels ──────────────────────────────────────────────────────────
+function exportFeedback() {
+  const labels = Object.entries(feedback).map(([key, v]) => {
+    const [a, b] = key.split('|||');
+    return { comp_a: a, comp_b: b, label: v.label, rationale: v.rationale };
+  });
+  const blob = new Blob([JSON.stringify(labels, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'architect_labels.json';
+  a.click(); URL.revokeObjectURL(url);
+  showToast('Labels exported as architect_labels.json', 'info');
+}
+
+// ── Filters ────────────────────────────────────────────────────────────────
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCandidates();
+}
+
+function filterCluster(cid, el) {
+  activeCluster = cid;
+  document.querySelectorAll('.cluster-item').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  renderCandidates();
+}
+
+function onSearch(q) {
+  searchQuery = q.trim();
+  renderCandidates();
+}
+
+function toggleRationale(safeKey) {
+  const el = document.getElementById(`rat-${safeKey}`);
+  el.classList.toggle('open');
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+function updateStats() {
+  const total    = allCandidates.length;
+  const accepted = Object.values(feedback).filter(v => v.label === 1).length;
+  const rejected = Object.values(feedback).filter(v => v.label === 0).length;
+  const pending  = total - accepted - rejected;
+
+  document.getElementById('stat-accepted').textContent = `${accepted} accepted`;
+  document.getElementById('stat-rejected').textContent = `${rejected} rejected`;
+  document.getElementById('stat-pending').textContent  = `${pending} pending`;
+  document.getElementById('count-accepted').textContent = accepted;
+  document.getElementById('count-rejected').textContent = rejected;
+  document.getElementById('count-pending').textContent  = pending;
+  document.getElementById('progress-text').textContent  =
+    `${accepted+rejected} of ${total} reviewed`;
+
+  const pctA = total ? (accepted / total * 100) : 0;
+  const pctR = total ? (rejected / total * 100) : 0;
+  document.getElementById('prog-accept').style.width = pctA + '%';
+  document.getElementById('prog-reject').style.width = pctR + '%';
+  document.getElementById('all-badge').textContent   = total;
+}
+
+function checkRetrainReady(stats) {
+  const sufficient = stats.accepted >= 3 && stats.rejected >= 3 && stats.total >= 10;
+  const banner = document.getElementById('retrain-banner');
+  const btn    = document.getElementById('retrain-btn');
+  banner.style.display = sufficient ? 'flex' : 'none';
+  btn.style.display    = sufficient ? 'flex' : 'none';
+  document.getElementById('rp-sufficient').textContent =
+    sufficient ? `Yes (${stats.total} labels)` : `No (need ≥10, have ${stats.total})`;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function getStatus(key) {
+  const fb = feedback[key];
+  if (!fb) return 'unreviewed';
+  return fb.label === 1 ? 'accepted' : 'rejected';
+}
+
+function canonicalKey(a, b) {
+  return [a, b].sort().join('|||');
+}
+
+function shortName(uid, max=35) {
+  if (!uid || uid.length <= max) return uid;
+  const parts = uid.split('.');
+  if (parts.length >= 2) return '…' + parts.slice(-2).join('.');
+  return '…' + uid.slice(-max);
+}
+
+function suggestClusterName(members) {
+  if (!members || members.length === 0) return 'Cluster';
+  const shorts = members.map(m => {
+    const parts = m.split('.');
+    return parts[parts.length-1].replace(/Service|Controller|Repository|Impl/g,'');
+  });
+  return shorts[0] + (members.length > 1 ? ` +${members.length-1}` : '');
+}
+
+function showEmpty(msg) {
+  document.getElementById('candidates-grid').innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon"></div>
+      <div class="empty-title">No data</div>
+      <div class="empty-sub">${msg}</div>
+    </div>`;
+}
+
+function showToast(msg, type='info') {
+  const wrap = document.getElementById('toast-wrap');
+  const el   = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${msg}</span>`;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+</script>
+</body>
+</html>

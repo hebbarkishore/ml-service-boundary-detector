@@ -12,7 +12,7 @@ class CodeUnit:
     Represents one logical code unit – typically a class (Java) or module (Python).
     This is the primary node in every signal graph.
     """
-    unit_id:      str         
+    unit_id:      str          
     file_path:    str
     language:     str
     package:      str = ""
@@ -21,7 +21,7 @@ class CodeUnit:
     method_names: List[str] = field(default_factory=list)
     imports:      List[str] = field(default_factory=list)
     annotations:  List[str] = field(default_factory=list)   
-    comments:     str = ""                                 
+    comments:     str = ""                                  
     raw_tokens:   List[str] = field(default_factory=list)   
 
 
@@ -45,8 +45,8 @@ class CodeUnit:
 @dataclass
 class DependencyEdge:
     source: str         
-    target: str         
-    kind:   str         
+    target: str          
+    kind:   str          
     weight: int = 1
 
 
@@ -59,7 +59,8 @@ class DocumentChunk:
     """
     source_file: str
     text:        str
-    doc_type:    str = "unknown"   
+    doc_type:    str = "unknown"   # "requirements" | "architecture" | "api-spec" | …
+
 
 
 @dataclass
@@ -74,13 +75,14 @@ class PairFeatures:
     structural_coupling_weight: float = 0.0    
     tfidf_cosine_similarity:    float = 0.0    
     semantic_similarity:        float = 0.0    
-    shared_import_count:        int   = 0     
+    shared_import_count:        int   = 0      
     shared_annotation_count:    int   = 0      
     inheritance_linked:         int   = 0      
+
     # Behavioral
     runtime_call_frequency:     float = 0.0    
     runtime_call_depth:         float = 0.0    
-    temporal_affinity:          float = 0.0   
+    temporal_affinity:          float = 0.0    
 
     # Evolutionary
     co_change_frequency:        float = 0.0    
@@ -93,8 +95,10 @@ class PairFeatures:
     betweenness_a:  float = 0.0
     betweenness_b:  float = 0.0
 
+    # Cross-layer indicator 
     cross_layer_flag: int = 0
 
+    # Ground truth label (1 = valid boundary, 0 = should stay together)
     label: Optional[int] = None
 
     def to_feature_vector(self) -> List[float]:

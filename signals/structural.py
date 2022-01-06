@@ -16,7 +16,7 @@ try:
     _HAS_JAVA = True
 except ImportError:
     _HAS_JAVA = False
-    logging.warning("javalang not installed – Java files will be token-only.")
+    logging.warning("javalang not installed - Java files will be token-only.")
 
 try:
     import lizard
@@ -29,7 +29,7 @@ try:
     _HAS_GENSIM = True
 except ImportError:
     _HAS_GENSIM = False
-    logging.warning("gensim not installed – semantic similarity will be skipped.")
+    logging.warning("gensim not installed - semantic similarity will be skipped.")
 
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -40,9 +40,6 @@ from config import (CODE_EXTENSIONS, TFIDF_MAX_FEATURES, TFIDF_NGRAM_RANGE,
 log = logging.getLogger(__name__)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 _CAMEL_RE = re.compile(r"[A-Za-z][a-z]+|[A-Z]+(?=[A-Z]|$)")
 _SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv",
@@ -73,9 +70,6 @@ def _layer_hints(name: str) -> List[str]:
     return [layer for layer, pat in LAYER_PATTERNS.items() if pat.search(name)]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Python parser
-# ─────────────────────────────────────────────────────────────────────────────
 
 class _PythonParser:
 
@@ -116,7 +110,6 @@ class _PythonParser:
                 if node.module:
                     unit.imports.append(node.module)
 
-        # Inline comments (ast strips them)
         for line in src.splitlines():
             s = line.strip()
             if s.startswith("#"):
@@ -154,9 +147,6 @@ class _PythonParser:
         return unit
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Java parser
-# ─────────────────────────────────────────────────────────────────────────────
 
 class _JavaParser:
 
@@ -190,7 +180,6 @@ class _JavaParser:
         for imp in (tree.imports or []):
             unit.imports.append(imp.path)
 
-        # Javadoc + line comments via regex
         comments += re.findall(r"/\*\*?(.*?)\*/", src, re.DOTALL)
         comments += re.findall(r"//(.+)", src)
         unit.comments   = " ".join(comments)
@@ -206,9 +195,6 @@ class _JavaParser:
                         language="java", raw_tokens=_tokenise(src))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Generic fallback parser
-# ─────────────────────────────────────────────────────────────────────────────
 
 class _GenericParser:
     def parse(self, path: str) -> CodeUnit:
@@ -222,40 +208,31 @@ class _GenericParser:
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Structural Signal Extractor (main class)
-# ─────────────────────────────────────────────────────────────────────────────
 
 class StructuralSignalExtractor:
-    """
-    Orchestrates code scanning, dependency graph construction, TF-IDF
-    similarity computation, optional Word2Vec semantic embeddings, and
-    NetworkX centrality metrics.
-    """
 
     def __init__(self):
         self._py  = _PythonParser()
         self._jv  = _JavaParser()
         self._gen = _GenericParser()
 
-    # ── Public API ────────────────────────────────────────────────────────────
 
     def extract(
         self,
-        roots: List[str],                    # directories OR individual files
-        doc_corpus: Optional[List[str]] = None,   # extra text from docs ingestion
+        roots: List[str],                   
+        doc_corpus: Optional[List[str]] = None,   
     ) -> Dict:
         """
         Returns a dict with:
-          units           – List[CodeUnit]
-          edges           – List[DependencyEdge]
-          graph           – nx.DiGraph
-          tfidf_matrix    – sparse CSR (n_units × n_features)
-          tfidf_vocab     – vectoriser vocabulary
-          cosine_sim      – n×n cosine similarity matrix
-          semantic_sim    – n×n semantic similarity matrix (or zeros)
-          centrality      – dict {unit_id: {pagerank, betweenness}}
-          unit_index      – {unit_id: row_index}
+          units           - List[CodeUnit]
+          edges           - List[DependencyEdge]
+          graph           - nx.DiGraph
+          tfidf_matrix    - sparse CSR (n_units × n_features)
+          tfidf_vocab     - vectoriser vocabulary
+          cosine_sim      - n×n cosine similarity matrix
+          semantic_sim    - n×n semantic similarity matrix (or zeros)
+          centrality      - dict {unit_id: {pagerank, betweenness}}
+          unit_index      - {unit_id: row_index}
         """
         files = self._collect(roots)
         units = self._parse(files)
@@ -267,7 +244,7 @@ class StructuralSignalExtractor:
         corpus    = [u.vocabulary() for u in units]
         unit_index = {u.unit_id: i for i, u in enumerate(units)}
 
-        # TF-IDF
+       
         tfidf_vec    = TfidfVectorizer(
             max_features=TFIDF_MAX_FEATURES,
             ngram_range=TFIDF_NGRAM_RANGE,
@@ -276,10 +253,9 @@ class StructuralSignalExtractor:
         tfidf_matrix = tfidf_vec.fit_transform(corpus)
         cosine_sim   = cosine_similarity(tfidf_matrix).astype(np.float32)
 
-        # Semantic similarity (Word2Vec)
         semantic_sim = self._word2vec_similarity(units, doc_corpus)
 
-        # Centrality
+
         centrality = self._centrality(graph)
 
         return dict(
@@ -294,7 +270,6 @@ class StructuralSignalExtractor:
             unit_index  = unit_index,
         )
 
-    # ── File collection ───────────────────────────────────────────────────────
 
     def _collect(self, roots: List[str]) -> List[str]:
         files = []
@@ -322,7 +297,6 @@ class StructuralSignalExtractor:
                     self._gen.parse(fp))
             if unit is None:
                 continue
-            # Deduplicate unit_ids (can happen with similarly named files)
             if unit.unit_id in seen_ids:
                 seen_ids[unit.unit_id] += 1
                 unit.unit_id = f"{unit.unit_id}_{seen_ids[unit.unit_id]}"
@@ -331,17 +305,14 @@ class StructuralSignalExtractor:
             units.append(unit)
         return units
 
-    # ── Dependency edges ──────────────────────────────────────────────────────
 
     def _build_edges(self, units: List[CodeUnit]) -> List[DependencyEdge]:
         id_set = {u.unit_id for u in units}
-        # Build prefix → unit_id lookup for fuzzy resolution
         prefix_map: Dict[str, str] = {}
         for u in units:
             for cls in u.class_names:
                 prefix_map[cls]           = u.unit_id
                 prefix_map[u.unit_id]     = u.unit_id
-                # short name (last segment)
                 short = cls.split(".")[-1]
                 if short not in prefix_map:
                     prefix_map[short] = u.unit_id
@@ -361,10 +332,9 @@ class StructuralSignalExtractor:
 
     @staticmethod
     def _resolve(imp: str, prefix_map: Dict[str, str]) -> Optional[str]:
-        """Best-effort import → unit_id resolution."""
+        """Best-effort import - unit_id resolution."""
         if imp in prefix_map:
             return prefix_map[imp]
-        # Try progressively shorter suffixes
         parts = imp.split(".")
         for i in range(len(parts) - 1, 0, -1):
             candidate = ".".join(parts[:i])
@@ -375,7 +345,6 @@ class StructuralSignalExtractor:
                 return prefix_map[short]
         return None
 
-    # ── Graph ─────────────────────────────────────────────────────────────────
 
     @staticmethod
     def _build_graph(units: List[CodeUnit], edges: List[DependencyEdge]) -> nx.DiGraph:
@@ -391,14 +360,12 @@ class StructuralSignalExtractor:
                 G.add_edge(e.source, e.target, weight=e.weight, kind=e.kind)
         return G
 
-    # ── Centrality ────────────────────────────────────────────────────────────
 
     @staticmethod
     def _centrality(G: nx.DiGraph) -> Dict[str, Dict[str, float]]:
         if len(G) == 0:
             return {}
         pr = nx.pagerank(G, alpha=0.85, weight="weight")
-        # betweenness is expensive on large graphs; use approximate k-sample
         k = min(len(G), 50)
         try:
             bc = nx.betweenness_centrality(G, k=k, weight="weight", normalized=True)
@@ -410,7 +377,6 @@ class StructuralSignalExtractor:
                             "betweenness": bc.get(node, 0.0)}
         return result
 
-    # ── Word2Vec semantic similarity ─────────────────────────────────────────
 
     @staticmethod
     def _word2vec_similarity(

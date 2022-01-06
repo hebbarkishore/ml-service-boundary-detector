@@ -10,48 +10,44 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Regex patterns for different trace formats
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 _PATTERNS = {
-    # Pattern 1 – log4j/logback style: extract class from [ClassName]
+
     "log4j": re.compile(
-        r"(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2})"   # timestamp
-        r".*?\[([A-Za-z][\w$.]+)\]"                       # [ClassName]
+        r"(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}:\d{2})"   
+        r".*?\[([A-Za-z][\w$.]+)\]"                       
     ),
 
-    # Pattern 2 – Python logging: extract logger name
+
     "python_log": re.compile(
         r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})"
         r"[,\.]?\d*\s+-\s+([\w.]+)\s+-\s+\w+"
     ),
 
-    # Pattern 3 – CALL notation
+
     "call_notation": re.compile(
         r"CALL\s+([\w$.]+)\s*->\s*([\w$.]+)"
         r"(?:\s*\[depth=(\d+)\])?"
     ),
 
-    # Pattern 4 – OTel span CSV (trace_id,span_id,parent,service,op,start,dur)
+
     "otel_csv": re.compile(
         r"^[0-9a-f\-]{8,},\s*[0-9a-f\-]{8,},\s*([0-9a-f\-]*),\s*"
         r"([\w.\-]+),\s*([\w./\-]+),\s*\d+,\s*\d+"
     ),
 
-    # Pattern 5 – Spring Boot HTTP access log
+
     "spring_http": re.compile(
         r"(GET|POST|PUT|DELETE|PATCH)\s+(/\S+)\s+(\d{3})\s+\d+ms\s+([\w.]+)"
     ),
 }
 
-# Time-window size for temporal co-occurrence (seconds)
+
 _WINDOW_SECONDS = 5
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Trace event (internal)
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 class _TraceEvent:
     __slots__ = ("timestamp", "component", "target", "depth")
@@ -64,9 +60,7 @@ class _TraceEvent:
         self.depth     = depth
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Behavioral Signal Extractor
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 class BehavioralSignalExtractor:
     """
@@ -95,7 +89,7 @@ class BehavioralSignalExtractor:
         self._total_windows   = 0
         self._events_parsed   = 0
 
-    # ── Public ────────────────────────────────────────────────────────────────
+
 
     def load_trace_files(self, file_paths: List[str]) -> None:
         """Load and parse all provided trace / log files."""
@@ -153,14 +147,13 @@ class BehavioralSignalExtractor:
                     })
         return sorted(pairs, key=lambda x: x["calls"], reverse=True)[:top_k]
 
-    # ── Parsing ───────────────────────────────────────────────────────────────
+
 
     def _parse_file(self, fp: str) -> List[_TraceEvent]:
         lines  = Path(fp).read_text(encoding="utf-8", errors="ignore").splitlines()
         events: List[_TraceEvent] = []
 
         for line in lines:
-            # Direct CALL notation – highest fidelity
             m = _PATTERNS["call_notation"].search(line)
             if m:
                 src, tgt = m.group(1), m.group(2)
@@ -171,7 +164,6 @@ class BehavioralSignalExtractor:
                     events.append(_TraceEvent(0.0, src_id, tgt_id, depth))
                 continue
 
-            # OTel CSV
             m = _PATTERNS["otel_csv"].match(line)
             if m:
                 svc = self._resolve(m.group(2))
@@ -179,7 +171,6 @@ class BehavioralSignalExtractor:
                     events.append(_TraceEvent(0.0, svc))
                 continue
 
-            # log4j
             m = _PATTERNS["log4j"].search(line)
             if m:
                 ts   = self._parse_ts(m.group(1))
@@ -188,7 +179,6 @@ class BehavioralSignalExtractor:
                     events.append(_TraceEvent(ts, comp))
                 continue
 
-            # Python logging
             m = _PATTERNS["python_log"].search(line)
             if m:
                 ts   = self._parse_ts(m.group(1))
@@ -203,22 +193,18 @@ class BehavioralSignalExtractor:
         """Fuzzy-match a log token to a known unit_id."""
         if name in self._unit_set:
             return name
-        # Short-class-name match
         for uid in self._unit_ids:
             if uid.endswith("." + name) or uid.endswith("/" + name) or uid == name:
                 return uid
-            # Last segment match
             short = uid.split(".")[-1]
             if short == name or short == name.split(".")[-1]:
                 return uid
         return None
 
-    # ── Accumulation ──────────────────────────────────────────────────────────
 
     def _accumulate(self, events: List[_TraceEvent]) -> None:
         self._events_parsed += len(events)
 
-        # Direct call edges (CALL notation)
         for ev in events:
             if ev.target:
                 i = self._unit_index.get(ev.component)
@@ -228,7 +214,6 @@ class BehavioralSignalExtractor:
                     self._call_depth[i, j]  += ev.depth
                     self._depth_count[i, j] += 1
 
-        # Temporal co-occurrence with a sliding time window
         ts_events = [ev for ev in events if ev.timestamp > 0 and not ev.target]
         if not ts_events:
             return
@@ -238,7 +223,6 @@ class BehavioralSignalExtractor:
         window: List[_TraceEvent] = []
 
         for ev in ts_events:
-            # Evict events outside window
             window = [e for e in window
                       if ev.timestamp - e.timestamp <= _WINDOW_SECONDS]
             seen_in_window = {e.component for e in window}

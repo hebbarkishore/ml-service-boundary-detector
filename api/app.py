@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 app  = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024
 
-
+# Single shared feedback store instance (persists to output/feedback_store.json)
 _feedback_store = FeedbackStore()
 
 _ALLOWED_DOC_EXTS   = {".pdf", ".docx", ".md", ".txt", ".html"}
@@ -53,7 +53,6 @@ def health():
 
 
 
-
 @app.route("/api/v1/analyze", methods=["POST"])
 def analyze():
     body       = request.get_json(force=True, silent=True) or {}
@@ -64,7 +63,6 @@ def analyze():
         if not Path(root).exists():
             return jsonify({"error": f"Path does not exist: {root}"}), 400
 
-    # Auto-inject stored feedback labels
     stored_labels   = _feedback_store.get_labelled_pairs_for_training()
     labels_file     = body.get("labels_file")
     feedback_injected = 0
@@ -251,7 +249,6 @@ def feature_importances():
     if not ranker.load():
         return jsonify({"error": "No trained model. Use POST /api/v1/train first."}), 404
     return jsonify({"feature_importances": ranker.feature_importances}), 200
-
 
 
 

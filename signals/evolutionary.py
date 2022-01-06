@@ -21,13 +21,9 @@ from config import GIT_MAX_COMMITS, GIT_SINCE_DAYS, CO_CHANGE_MIN_COUNT
 
 log = logging.getLogger(__name__)
 
-# Decay half-life for recency weighting (days)
 _DECAY_HALF_LIFE = 90.0
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Evolutionary Signal Extractor
-# ─────────────────────────────────────────────────────────────────────────────
 
 class EvolutionarySignalExtractor:
     """
@@ -46,25 +42,23 @@ class EvolutionarySignalExtractor:
         self._repo_path = repo_path
         self._repo: Optional["git.Repo"] = None
 
-        # Per-file stats
         self._file_change_count: Dict[str, int]       = defaultdict(int)
         self._co_change_raw:     Dict[Tuple, int]     = defaultdict(int)
         self._co_change_decay:   Dict[Tuple, float]   = defaultdict(float)
         self._mined = False
 
-    # ── Public ────────────────────────────────────────────────────────────────
 
     def mine(self) -> None:
         """Mine the git repository. Must be called before get_pair_features."""
         if not _HAS_GIT:
-            log.warning("gitpython unavailable – skipping git mining.")
+            log.warning("gitpython unavailable - skipping git mining.")
             self._mined = True
             return
 
         try:
             self._repo = git.Repo(self._repo_path, search_parent_directories=True)
         except git.InvalidGitRepositoryError:
-            log.warning("No git repo found at %s – evolutionary signals zeroed.", self._repo_path)
+            log.warning("No git repo found at %s - evolutionary signals zeroed.", self._repo_path)
             self._mined = True
             return
 
@@ -84,14 +78,12 @@ class EvolutionarySignalExtractor:
                 if not changed_files:
                     continue
 
-                # Decay weight: more recent → higher weight
                 age_days   = (now_ts - commit.committed_date) / 86400.0
                 decay_w    = math.pow(0.5, age_days / _DECAY_HALF_LIFE)
 
                 for fp in changed_files:
                     self._file_change_count[fp] += 1
 
-                # Pairwise co-change (only for manageable commit sizes)
                 if len(changed_files) <= 100:
                     files_list = sorted(changed_files)
                     for i, fa in enumerate(files_list):
@@ -120,12 +112,10 @@ class EvolutionarySignalExtractor:
         if not self._mined:
             self.mine()
 
-        # Build file_path → unit_id map
         fp_to_uid: Dict[str, str] = {}
         for u in units:
             fp_to_uid[self._normalise(u.file_path)] = u.unit_id
 
-        # Aggregate file-level metrics to unit-level
         unit_change_count: Dict[str, int]         = defaultdict(int)
         unit_co_raw:       Dict[Tuple, int]       = defaultdict(int)
         unit_co_decay:     Dict[Tuple, float]     = defaultdict(float)
@@ -145,7 +135,6 @@ class EvolutionarySignalExtractor:
                 unit_co_raw[key]   += count
                 unit_co_decay[key] += self._co_change_decay.get((fa, fb), 0.0)
 
-        # Compute Zimmermann logical coupling coefficient
         result: Dict[Tuple[str, str], Dict[str, float]] = {}
         all_change_total = max(sum(unit_change_count.values()), 1)
 
@@ -188,7 +177,6 @@ class EvolutionarySignalExtractor:
             })
         return commits
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
 
     @staticmethod
     def _changed_files(commit: "git.Commit") -> Set[str]:
@@ -202,7 +190,6 @@ class EvolutionarySignalExtractor:
                     if item.b_path or item.a_path
                 }
             else:
-                # Initial commit
                 return {item.path for item in commit.tree.traverse()
                         if hasattr(item, "path")}
         except Exception as e:
