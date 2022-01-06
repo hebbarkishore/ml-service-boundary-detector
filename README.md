@@ -88,8 +88,9 @@ python cli.py analyze \
 
 # Start the review UI and REST API
 python cli.py serve
-# → Open http://localhost:5050/ in your browser
+# (Check the port) Open http://localhost:5050/ in your browser
 ```
+
 
 ---
 
