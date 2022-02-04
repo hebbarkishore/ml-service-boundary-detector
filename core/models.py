@@ -80,9 +80,10 @@ class PairFeatures:
     inheritance_linked:         int   = 0      
 
     # Behavioral
-    runtime_call_frequency:     float = 0.0    
-    runtime_call_depth:         float = 0.0    
-    temporal_affinity:          float = 0.0    
+    runtime_call_frequency:     float = 0.0
+    runtime_call_depth:         float = 0.0
+    temporal_affinity:          float = 0.0
+    execution_order_stability:  float = 0.0
 
     # Evolutionary
     co_change_frequency:        float = 0.0    
@@ -113,6 +114,7 @@ class PairFeatures:
             self.runtime_call_frequency,
             self.runtime_call_depth,
             self.temporal_affinity,
+            self.execution_order_stability,
             self.co_change_frequency,
             self.co_change_recency,
             self.logical_coupling_score,
@@ -135,6 +137,7 @@ class PairFeatures:
             "runtime_call_frequency",
             "runtime_call_depth",
             "temporal_affinity",
+            "execution_order_stability",
             "co_change_frequency",
             "co_change_recency",
             "logical_coupling_score",

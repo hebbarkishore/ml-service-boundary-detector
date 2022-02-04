@@ -162,9 +162,10 @@ class FeatureEngineer:
         beh_rev = self._behavioral.get((b,a), {})
         beh     = beh_fwd or beh_rev or self._behavioral.get(beh_key, {})
         if beh:
-            pf.runtime_call_frequency = beh.get("runtime_call_frequency", 0.0)
-            pf.runtime_call_depth     = beh.get("runtime_call_depth",     0.0)
-            pf.temporal_affinity      = beh.get("temporal_affinity",      0.0)
+            pf.runtime_call_frequency    = beh.get("runtime_call_frequency",    0.0)
+            pf.runtime_call_depth        = beh.get("runtime_call_depth",        0.0)
+            pf.temporal_affinity         = beh.get("temporal_affinity",         0.0)
+            pf.execution_order_stability = beh.get("execution_order_stability", 0.0)
 
 
         evol_key = (min(a,b), max(a,b))

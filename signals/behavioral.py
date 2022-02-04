@@ -7,6 +7,10 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from config import EXECUTION_ORDER_MIN_CALLS
+
 log = logging.getLogger(__name__)
 
 
@@ -85,6 +89,8 @@ class BehavioralSignalExtractor:
         self._call_depth    = np.zeros((n, n), dtype=np.float32)  # sum of depths
         self._depth_count   = np.zeros((n, n), dtype=np.float32)  # for averaging
         self._co_occurrence = np.zeros((n, n), dtype=np.float32)  # window co-occurrence
+        # Execution order stability
+        self._order_before  = np.zeros((n, n), dtype=np.float32)
 
         self._total_windows   = 0
         self._events_parsed   = 0
@@ -105,8 +111,10 @@ class BehavioralSignalExtractor:
     def get_pair_features(self) -> Dict[Tuple[str, str], Dict[str, float]]:
         """
         Returns dict[(comp_a, comp_b)] = {
-            runtime_call_frequency, runtime_call_depth, temporal_affinity
+            runtime_call_frequency, runtime_call_depth, temporal_affinity,
+            execution_order_stability
         }
+        Pairs are keyed in canonical (min, max) order.
         """
         result = {}
         n = len(self._unit_ids)
@@ -114,22 +122,39 @@ class BehavioralSignalExtractor:
         total_windows = max(self._total_windows, 1)
 
         for i in range(n):
-            for j in range(n):
-                if i == j:
-                    continue
-                c = self._call_count[i, j]
-                if c == 0:
+            for j in range(i + 1, n):
+                c_ij = self._call_count[i, j]
+                c_ji = self._call_count[j, i]
+                co   = self._co_occurrence[i, j]
+                if c_ij == 0 and c_ji == 0 and co == 0:
                     continue
 
+                c_dom = max(c_ij, c_ji)
                 avg_depth = (self._call_depth[i, j] / self._depth_count[i, j]
                              if self._depth_count[i, j] > 0 else 0.0)
-                affinity  = self._co_occurrence[i, j] / total_windows
+                affinity  = co / total_windows
+
+                # Execution order stability: how consistently one component
+                # precedes the other across co-occurrence windows.
+                # Range [0, 1]; 1.0 = perfectly unidirectional order.
+                o_ij = self._order_before[i, j]
+                o_ji = self._order_before[j, i]
+                order_total = o_ij + o_ji
+                if order_total >= EXECUTION_ORDER_MIN_CALLS:
+                    stability = abs(o_ij - o_ji) / order_total
+                else:
+                    # Fall back to call-direction asymmetry when timestamped
+                    # events are too few to be reliable.
+                    call_total = c_ij + c_ji
+                    stability  = (abs(c_ij - c_ji) / call_total
+                                  if call_total >= EXECUTION_ORDER_MIN_CALLS else 0.0)
 
                 key = (self._unit_ids[i], self._unit_ids[j])
                 result[key] = {
-                    "runtime_call_frequency": float(c / max(total_calls, 1)),
-                    "runtime_call_depth":     float(avg_depth),
-                    "temporal_affinity":      float(affinity),
+                    "runtime_call_frequency":    float(c_dom / max(total_calls, 1)),
+                    "runtime_call_depth":        float(avg_depth),
+                    "temporal_affinity":         float(affinity),
+                    "execution_order_stability": float(stability),
                 }
         return result
 
@@ -219,19 +244,19 @@ class BehavioralSignalExtractor:
             return
 
         ts_events.sort(key=lambda e: e.timestamp)
-        ptr = 0
         window: List[_TraceEvent] = []
 
         for ev in ts_events:
             window = [e for e in window
                       if ev.timestamp - e.timestamp <= _WINDOW_SECONDS]
+            i = self._unit_index.get(ev.component)
             seen_in_window = {e.component for e in window}
             for other in seen_in_window:
-                i = self._unit_index.get(ev.component)
                 j = self._unit_index.get(other)
                 if i is not None and j is not None and i != j:
                     self._co_occurrence[i, j] += 1
                     self._co_occurrence[j, i] += 1
+                    self._order_before[j, i] += 1
             window.append(ev)
             self._total_windows += 1
 
