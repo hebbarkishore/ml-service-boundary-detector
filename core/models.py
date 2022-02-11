@@ -86,9 +86,10 @@ class PairFeatures:
     execution_order_stability:  float = 0.0
 
     # Evolutionary
-    co_change_frequency:        float = 0.0    
-    co_change_recency:          float = 0.0    
-    logical_coupling_score:     float = 0.0    
+    co_change_frequency:              float = 0.0
+    co_change_recency:                float = 0.0
+    logical_coupling_score:           float = 0.0
+    change_sequence_directionality:   float = 0.0
 
     # Graph centrality features
     pagerank_a:     float = 0.0
@@ -118,6 +119,7 @@ class PairFeatures:
             self.co_change_frequency,
             self.co_change_recency,
             self.logical_coupling_score,
+            self.change_sequence_directionality,
             self.pagerank_a,
             self.pagerank_b,
             self.betweenness_a,
@@ -141,6 +143,7 @@ class PairFeatures:
             "co_change_frequency",
             "co_change_recency",
             "logical_coupling_score",
+            "change_sequence_directionality",
             "pagerank_a",
             "pagerank_b",
             "betweenness_a",
