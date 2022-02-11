@@ -17,7 +17,7 @@ except ImportError:
 
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from config import GIT_MAX_COMMITS, GIT_SINCE_DAYS, CO_CHANGE_MIN_COUNT
+from config import GIT_MAX_COMMITS, GIT_SINCE_DAYS, CO_CHANGE_MIN_COUNT, SEQUENCE_LEAD_WINDOW_DAYS
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +45,8 @@ class EvolutionarySignalExtractor:
         self._file_change_count: Dict[str, int]       = defaultdict(int)
         self._co_change_raw:     Dict[Tuple, int]     = defaultdict(int)
         self._co_change_decay:   Dict[Tuple, float]   = defaultdict(float)
+        # Ordered commit timestamps per file, used to compute sequence directionality.
+        self._file_commit_times: Dict[str, List[float]] = defaultdict(list)
         self._mined = False
 
 
@@ -83,6 +85,7 @@ class EvolutionarySignalExtractor:
 
                 for fp in changed_files:
                     self._file_change_count[fp] += 1
+                    self._file_commit_times[fp].append(float(commit.committed_date))
 
                 if len(changed_files) <= 100:
                     files_list = sorted(changed_files)
@@ -135,6 +138,15 @@ class EvolutionarySignalExtractor:
                 unit_co_raw[key]   += count
                 unit_co_decay[key] += self._co_change_decay.get((fa, fb), 0.0)
 
+        # Build per-unit commit-time lists for sequence directionality.
+        unit_commit_times: Dict[str, List[float]] = defaultdict(list)
+        for fp, times in self._file_commit_times.items():
+            uid = fp_to_uid.get(self._normalise(fp))
+            if uid:
+                unit_commit_times[uid].extend(times)
+        for uid in unit_commit_times:
+            unit_commit_times[uid].sort()
+
         result: Dict[Tuple[str, str], Dict[str, float]] = {}
         all_change_total = max(sum(unit_change_count.values()), 1)
 
@@ -144,10 +156,16 @@ class EvolutionarySignalExtractor:
             denom = math.sqrt(ca * cb)
             logical_coupling = raw / denom if denom > 0 else 0.0
 
+            directionality = self._sequence_directionality(
+                unit_commit_times.get(ua, []),
+                unit_commit_times.get(ub, []),
+            )
+
             result[(ua, ub)] = {
-                "co_change_frequency":  raw / all_change_total,
-                "co_change_recency":    unit_co_decay.get((ua, ub), 0.0),
-                "logical_coupling_score": logical_coupling,
+                "co_change_frequency":         raw / all_change_total,
+                "co_change_recency":           unit_co_decay.get((ua, ub), 0.0),
+                "logical_coupling_score":      logical_coupling,
+                "change_sequence_directionality": directionality,
             }
         return result
 
@@ -177,6 +195,47 @@ class EvolutionarySignalExtractor:
             })
         return commits
 
+
+    @staticmethod
+    def _sequence_directionality(
+        times_a: List[float],
+        times_b: List[float],
+    ) -> float:
+        """
+        Compute how consistently A's commits precede B's commits (or vice versa)
+        within a SEQUENCE_LEAD_WINDOW_DAYS window.
+
+        For each change to A, count whether B changed within the next
+        SEQUENCE_LEAD_WINDOW_DAYS days (lead_ab).  Do the same with A and B
+        swapped (lead_ba).  Return the normalised asymmetry in [0, 1]:
+          0.0 = no directional pattern / perfectly symmetric
+          1.0 = one file always leads the other
+        """
+        if not times_a or not times_b:
+            return 0.0
+
+        window_secs = SEQUENCE_LEAD_WINDOW_DAYS * 86400.0
+        lead_ab = 0  # A changed, then B changed within window
+        lead_ba = 0  # B changed, then A changed within window
+
+        b_arr = times_b  # already sorted
+
+        import bisect
+        for ta in times_a:
+            lo = bisect.bisect_right(b_arr, ta)
+            hi = bisect.bisect_right(b_arr, ta + window_secs)
+            if hi > lo:
+                lead_ab += 1
+
+        a_arr = times_a
+        for tb in times_b:
+            lo = bisect.bisect_right(a_arr, tb)
+            hi = bisect.bisect_right(a_arr, tb + window_secs)
+            if hi > lo:
+                lead_ba += 1
+
+        total = lead_ab + lead_ba
+        return abs(lead_ab - lead_ba) / total if total > 0 else 0.0
 
     @staticmethod
     def _changed_files(commit: "git.Commit") -> Set[str]:

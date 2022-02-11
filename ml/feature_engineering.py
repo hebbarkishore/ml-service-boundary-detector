@@ -171,8 +171,9 @@ class FeatureEngineer:
         evol_key = (min(a,b), max(a,b))
         evol     = self._evol.get(evol_key, self._evol.get((a,b), self._evol.get((b,a), {})))
         if evol:
-            pf.co_change_frequency    = evol.get("co_change_frequency",   0.0)
-            pf.co_change_recency      = evol.get("co_change_recency",     0.0)
-            pf.logical_coupling_score = evol.get("logical_coupling_score",0.0)
+            pf.co_change_frequency             = evol.get("co_change_frequency",             0.0)
+            pf.co_change_recency               = evol.get("co_change_recency",               0.0)
+            pf.logical_coupling_score          = evol.get("logical_coupling_score",          0.0)
+            pf.change_sequence_directionality  = evol.get("change_sequence_directionality",  0.0)
 
         return pf

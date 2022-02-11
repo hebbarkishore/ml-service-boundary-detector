@@ -1,7 +1,6 @@
 import re
 import os
 import logging
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -263,7 +262,7 @@ class BehavioralSignalExtractor:
     @staticmethod
     def _parse_ts(ts_str: str) -> float:
         """Parse ISO-ish timestamp string to epoch float (best-effort)."""
-        import time, datetime
+        import datetime
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
             try:
                 return datetime.datetime.strptime(ts_str.strip(), fmt).timestamp()
