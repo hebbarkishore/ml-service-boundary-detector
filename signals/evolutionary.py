@@ -2,11 +2,9 @@ import logging
 import math
 import os
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
-
-import numpy as np
 
 try:
     import git
@@ -64,12 +62,12 @@ class EvolutionarySignalExtractor:
             self._mined = True
             return
 
-        since_date = datetime.utcnow() - timedelta(days=GIT_SINCE_DAYS)
+        since_date = datetime.now(timezone.utc) - timedelta(days=GIT_SINCE_DAYS)
         log.info("Mining git history since %s (max %d commits)…",
                  since_date.date(), GIT_MAX_COMMITS)
 
         commits_processed = 0
-        now_ts = datetime.utcnow().timestamp()
+        now_ts = datetime.now(timezone.utc).timestamp()
 
         try:
             for commit in self._repo.iter_commits(
