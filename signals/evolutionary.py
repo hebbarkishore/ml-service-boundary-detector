@@ -57,7 +57,7 @@ class EvolutionarySignalExtractor:
 
         try:
             self._repo = git.Repo(self._repo_path, search_parent_directories=True)
-        except git.InvalidGitRepositoryError:
+        except (git.InvalidGitRepositoryError, git.NoSuchPathError):
             log.warning("No git repo found at %s - evolutionary signals zeroed.", self._repo_path)
             self._mined = True
             return
