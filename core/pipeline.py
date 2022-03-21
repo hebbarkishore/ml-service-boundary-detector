@@ -188,7 +188,7 @@ class ServiceBoundaryPipeline:
             mode                = "supervised"
         else:
             log.info("No labels — using unsupervised composite scoring …")
-            candidates = ranker.rank_unsupervised(pairs)
+            candidates = ranker.rank_unsupervised(pairs, feedback_labels=labelled_pairs or None)
             mode       = "unsupervised"
 
         cluster_map    = ranker.suggest_clusters(units, structural["tfidf_matrix"])

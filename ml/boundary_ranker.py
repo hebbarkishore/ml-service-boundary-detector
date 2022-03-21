@@ -32,7 +32,7 @@ from config import (
     GB_N_ESTIMATORS, GB_MAX_DEPTH, GB_LEARNING_RATE, GB_SUBSAMPLE,
     RANDOM_STATE, STRUCTURAL_WEIGHT, BEHAVIORAL_WEIGHT, EVOLUTIONARY_WEIGHT,
     HDBSCAN_MIN_CLUSTER_SIZE, HDBSCAN_MIN_SAMPLES, HDBSCAN_METRIC,
-    MODEL_DIR,
+    MODEL_DIR, ADAPTIVE_WEIGHT_ALPHA, ADAPTIVE_WEIGHT_MIN_FEEDBACK,
 )
 
 log = logging.getLogger(__name__)
@@ -171,7 +171,7 @@ class BoundaryRanker:
 
         candidates = []
         for pair, prob in zip(pairs, probs):
-            rationale = self._build_rationale(pair, prob)
+            rationale = self._build_rationale(pair)
             candidates.append(BoundaryCandidate(
                 comp_a          = pair.comp_a,
                 comp_b          = pair.comp_b,
@@ -185,17 +185,26 @@ class BoundaryRanker:
 
 
 
-    def rank_unsupervised(self, pairs: List[PairFeatures]) -> List[BoundaryCandidate]:
+    def rank_unsupervised(
+        self,
+        pairs: List[PairFeatures],
+        feedback_labels: Optional[Dict[Tuple[str, str], int]] = None,
+    ) -> List[BoundaryCandidate]:
         """
-        Compute a weighted composite score without any labelled data.
+        Compute a weighted composite score without a trained supervised model.
         Higher score = stronger boundary signal (components should be separated).
+
+        When `feedback_labels` contains enough architect decisions the channel
+        weights are shifted toward whichever signal best discriminates accepted
+        from rejected boundaries (adaptive weighting).  The base config weights
+        are always used as a prior so the result degrades gracefully to the
+        original behaviour when no feedback is available.
         """
 
         def safe_norm(vals):
             arr = np.array(vals, dtype=np.float32)
             rng = arr.max() - arr.min()
             return (arr - arr.min()) / rng if rng > 1e-9 else arr * 0
-
 
         struct_raw = [
             p.structural_coupling_weight * 0.4 +
@@ -205,50 +214,134 @@ class BoundaryRanker:
         ]
         struct_norm = safe_norm(struct_raw)
 
-
         behav_raw = [
             p.runtime_call_frequency * 0.5 +
             p.temporal_affinity * 0.3 +
-            p.runtime_call_depth * 0.2
+            p.execution_order_stability * 0.2
             for p in pairs
         ]
         behav_norm = safe_norm(behav_raw)
 
-
         evol_raw = [
-            (1.0 - p.logical_coupling_score) * 0.5 +
+            (1.0 - p.logical_coupling_score) * 0.4 +
             (1.0 - p.co_change_frequency) * 0.3 +
-            p.cross_layer_flag * 0.2
+            p.change_sequence_directionality * 0.3
             for p in pairs
         ]
         evol_norm = safe_norm(evol_raw)
 
+        w_s, w_b, w_e, adapted = self._compute_adaptive_weights(
+            pairs, struct_norm, behav_norm, evol_norm, feedback_labels or {}
+        )
+
         candidates = []
         for i, pair in enumerate(pairs):
             score = (
-                STRUCTURAL_WEIGHT  * float(struct_norm[i]) +
-                BEHAVIORAL_WEIGHT  * float(behav_norm[i]) +
-                EVOLUTIONARY_WEIGHT* float(evol_norm[i])
+                w_s * float(struct_norm[i]) +
+                w_b * float(behav_norm[i]) +
+                w_e * float(evol_norm[i])
             )
             if pair.cross_layer_flag:
                 score = min(1.0, score + 0.15)
 
             rationale = {
-                "structural_channel":   float(struct_norm[i]) * STRUCTURAL_WEIGHT,
-                "behavioral_channel":   float(behav_norm[i]) * BEHAVIORAL_WEIGHT,
-                "evolutionary_channel": float(evol_norm[i])  * EVOLUTIONARY_WEIGHT,
-                "cross_layer_penalty":  float(pair.cross_layer_flag) * 0.15,
+                "structural_channel":   round(float(struct_norm[i]) * w_s, 5),
+                "behavioral_channel":   round(float(behav_norm[i])  * w_b, 5),
+                "evolutionary_channel": round(float(evol_norm[i])   * w_e, 5),
+                "cross_layer_bonus":    round(float(pair.cross_layer_flag) * 0.15, 5),
+                "weights_adapted":      adapted,
+                "w_structural":         round(w_s, 4),
+                "w_behavioral":         round(w_b, 4),
+                "w_evolutionary":       round(w_e, 4),
             }
             candidates.append(BoundaryCandidate(
-                comp_a         = pair.comp_a,
-                comp_b         = pair.comp_b,
-                boundary_score = score,
-                confidence     = score,          # no prob calibration in unsupervised mode
-                rationale      = rationale,
+                comp_a            = pair.comp_a,
+                comp_b            = pair.comp_b,
+                boundary_score    = score,
+                confidence        = score,
+                rationale         = rationale,
                 suggested_service = self._suggest_name(pair),
             ))
 
         return sorted(candidates, key=lambda c: c.boundary_score, reverse=True)
+
+    def _compute_adaptive_weights(
+        self,
+        pairs:       List[PairFeatures],
+        struct_norm: np.ndarray,
+        behav_norm:  np.ndarray,
+        evol_norm:   np.ndarray,
+        feedback_labels: Dict[Tuple[str, str], int],
+    ) -> Tuple[float, float, float, bool]:
+        """
+        Shift the three channel weights toward whichever signal best separates
+        architect-accepted from architect-rejected boundaries.
+
+        Algorithm
+        ---------
+        1. For each pair that has a feedback label, record its normalised
+           sub-scores and its label (1 = boundary, 0 = keep together).
+        2. Compute per-channel discrimination power:
+               disc_c = |mean_c(accepted) - mean_c(rejected)|
+        3. Blend base weights with discrimination-driven weights using ALPHA:
+               w_c = base_c * (1 + ALPHA * disc_c / sum(disc))
+        4. Re-normalise so the three weights still sum to 1.
+
+        Returns (w_structural, w_behavioral, w_evolutionary, was_adapted).
+        Falls back to base config weights when feedback is insufficient.
+        """
+        base = (STRUCTURAL_WEIGHT, BEHAVIORAL_WEIGHT, EVOLUTIONARY_WEIGHT)
+
+        if len(feedback_labels) < ADAPTIVE_WEIGHT_MIN_FEEDBACK:
+            return (*base, False)
+
+        pair_key = {
+            (min(p.comp_a, p.comp_b), max(p.comp_a, p.comp_b)): idx
+            for idx, p in enumerate(pairs)
+        }
+
+        scores_by_label: Dict[int, List[Tuple[float, float, float]]] = {0: [], 1: []}
+        for (a, b), label in feedback_labels.items():
+            key = (min(a, b), max(a, b))
+            idx = pair_key.get(key)
+            if idx is None or label not in (0, 1):
+                continue
+            scores_by_label[label].append((
+                float(struct_norm[idx]),
+                float(behav_norm[idx]),
+                float(evol_norm[idx]),
+            ))
+
+        accepted = scores_by_label[1]
+        rejected = scores_by_label[0]
+
+        if not accepted or not rejected:
+            log.debug("Adaptive weights: missing accepted or rejected feedback — using base weights.")
+            return (*base, False)
+
+        def col_mean(rows, col):
+            return sum(r[col] for r in rows) / len(rows)
+
+        disc = [
+            abs(col_mean(accepted, c) - col_mean(rejected, c))
+            for c in range(3)
+        ]
+        disc_total = sum(disc) or 1.0
+
+        alpha = ADAPTIVE_WEIGHT_ALPHA
+        raw = [
+            base[c] * (1.0 + alpha * disc[c] / disc_total)
+            for c in range(3)
+        ]
+        total = sum(raw)
+        w_s, w_b, w_e = (r / total for r in raw)
+
+        log.info(
+            "Adaptive weights from %d feedback pairs  "
+            "→ structural=%.3f  behavioral=%.3f  evolutionary=%.3f",
+            len(accepted) + len(rejected), w_s, w_b, w_e,
+        )
+        return w_s, w_b, w_e, True
 
 
 
@@ -291,7 +384,7 @@ class BoundaryRanker:
 
 
 
-    def _build_rationale(self, pair: PairFeatures, prob: float) -> Dict[str, float]:
+    def _build_rationale(self, pair: PairFeatures) -> Dict[str, float]:
         if not self._feature_importances:
             return {}
         vec  = pair.to_feature_vector()

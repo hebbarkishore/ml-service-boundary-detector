@@ -47,6 +47,13 @@ STRUCTURAL_WEIGHT    = 0.40
 BEHAVIORAL_WEIGHT    = 0.35
 EVOLUTIONARY_WEIGHT  = 0.25
 
+# Adaptive signal weighting (unsupervised mode).
+# ALPHA controls how strongly feedback shifts the base weights (0 = no shift).
+# MIN_FEEDBACK is the minimum number of architect decisions required before
+# adaptive weights are applied; below this the base weights are used as-is.
+ADAPTIVE_WEIGHT_ALPHA        = 0.5
+ADAPTIVE_WEIGHT_MIN_FEEDBACK = 5
+
 
 GB_N_ESTIMATORS      = 200
 GB_MAX_DEPTH         = 4
