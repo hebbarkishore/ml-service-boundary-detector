@@ -1,117 +1,147 @@
 # Service Boundary Detector (SBD)
-### ML-Assisted Legacy System Modularization
+
+ML-assisted tool for identifying service boundaries in legacy codebases.
+
+> This tool is the reference implementation for the research paper:
+> **Machine Learning-Assisted Service Boundary Detection for Modularizing Legacy Systems**
+> Kishore Subramanya Hebbar - IJAET Vol. 4 No. 2, 2022
+> Full paper: https://romanpub.com/resources/ijaet-v4-2-2022-48.pdf
+>
+> Latest Code release: https://codeberg.org/kishorehebbar/ml-service-boundary-detector/releases
 
 ---
 
-## What is this?
+## What it does
 
-The Service Boundary Detector is a machine learning–assisted tool that helps software architects identify where to draw service boundaries when modernizing a legacy codebase into microservices.
+When modernizing a large legacy system into microservices, the hardest question is: *where do the boundaries go?* Getting this wrong leads to over-chatty services, shared-database anti-patterns, and failed migrations.
 
-Legacy systems are typically tightly coupled - classes and modules have grown together over years without clear separation of concerns. When modernizing such systems, one of the hardest problems is deciding *which components belong together* and *where one service should end and another begin*. Getting this wrong leads to chatty services, data inconsistencies, and failed migrations.
+SBD analyzes three complementary signals from your codebase and ranks component pairs by how likely they are to represent a valid service boundary:
 
-SBD addresses this by analyzing three types of signals from your codebase:
+- **Structural** - static dependencies, imports, class naming, annotations
+- **Behavioral** - runtime call patterns from execution traces or application logs
+- **Evolutionary** - co-change history from Git commits
 
-- **Structural** - how your code is organized: imports, dependencies, class naming, annotations
-- **Behavioral** - how your code runs: which components call each other at runtime
-- **Evolutionary** - how your code changes: which files are always modified together in Git
-
-These signals are combined into a machine learning model that ranks component pairs by their likelihood of representing a valid service boundary. An architect then reviews the ranked candidates, accepts or rejects each one, and those decisions feed back into the model to improve future runs.
-
-The goal is to reduce the manual effort of boundary analysis - not to replace the architect's judgment.
+It is a **decision-support tool**, not an automated decomposition engine. An architect reviews the ranked candidates, accepts or rejects each one, and those decisions improve future runs.
 
 ---
 
-## Why use it?
+## Requirements
 
-- You have a large legacy codebase and need to identify service boundaries but don't know where to start
-- Manual analysis of thousands of classes and dependencies is taking too long
-- You want a data-driven starting point that you can refine with domain knowledge
-- You need to justify boundary decisions with evidence from code structure, runtime behavior, and change history
+- Python 3.8 or 3.9
+- Git (for evolutionary signal extraction)
+- Java source analysis requires `javalang` (installed automatically)
 
 ---
 
 ## Installation
 
-### Cross-platform setup
-
 ```bash
+git clone https://codeberg.org/kishorehebbar/ml-service-boundary-detector.git
 cd ml-service-boundary-detector
 
-# Create and activate a virtual environment
 python -m venv venv
+source venv/bin/activate        # Mac / Linux
+venv\Scripts\activate.bat       # Windows
 
-# Activate:
-source venv/bin/activate          # Mac / Linux
-venv\Scripts\activate.bat         # Windows CMD
-venv\Scripts\Activate.ps1         # Windows PowerShell
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Download the language model (needed for semantic similarity)
 python -m spacy download en_core_web_md
 ```
 
-### If pip install fails (platform issues)
-
-Some packages like `hdbscan` and `pandas` require C compilation and can fail on certain platforms. If you hit errors, use the smart installer instead:
+If `pip install` fails due to platform-specific compilation issues (common with `hdbscan` on Windows or older Macs):
 
 ```bash
-python install.py           # core + NLP + clustering
-python install.py --minimal # core only (fastest, no spaCy/gensim)
-python install.py --all     # everything including Java + docs parsing
+python install.py           # recommended
+python install.py --minimal # structural signals only, no spaCy / gensim
+python install.py --all     # includes Java parsing and document ingestion
 ```
 
-### Platform notes
-
-| Platform | Known Issue | How it is handled |
+| Platform | Known issue | How handled |
 |---|---|---|
-| Apple Silicon (M1/M2/M3) | Old pinned versions have no ARM wheels | `install.py` uses flexible `>=` bounds with ARM-compatible versions |
-| Windows | `hdbscan` needs a C compiler | `install.py` uses `--only-binary` flag to avoid compilation |
-| Linux | Works out of the box | Standard install |
+| Apple Silicon | Some packages lack ARM wheels | `install.py` uses `>=` bounds with known-good versions |
+| Windows | `hdbscan` needs a C compiler | `install.py` uses `--only-binary` |
+| Linux | None | Standard install |
 
 ---
 
 ## Quick Start
 
 ```bash
-# Minimum: structural signal only (no traces or git needed)
-python cli.py analyze --code /path/to/your/src
+# Structural signals only — no traces or Git required
+python cli.py analyze --code /path/to/src
 
-# Full three-signal run
+# All three signals
 python cli.py analyze \
     --code ./src/main/java \
     --traces ./logs/app.log \
-    --docs ./docs/architecture.pdf \
     --repo . \
     --top-k 30
 
-# Start the review UI and REST API
+# Open the review UI
 python cli.py serve
-# (Check the port) Open http://localhost:5050/ in your browser
+# Visit http://localhost:5050
 ```
 
+---
+
+## Workflow
+
+1. **Analyze** — run `cli.py analyze` against your codebase
+2. **Review** — open the web UI, work through the ranked boundary candidates
+3. **Feedback** — accept or reject each pair; decisions are stored automatically
+4. **Retrain** — on the next run, stored feedback is injected and the model improves
+
+With fewer than 20 labelled pairs the ranker uses an unsupervised weighted composite score. Once enough feedback accumulates it switches to a supervised Gradient Boosting model trained on your decisions.
 
 ---
 
 ## Project Structure
 
 ```
-sbd/
-├── cli.py                          <- CLI: analyze / serve / gen-labels / feedback
-├── config.py                       <- All tunable parameters
-├── core/models.py                  <- Shared dataclasses
-├── core/pipeline.py                <- 7-stage orchestrator
-├── signals/structural.py           <- AST + TF-IDF + Word2Vec + NetworkX
-├── signals/behavioral.py           <- Runtime trace parsing
-├── signals/evolutionary.py         <- Git co-change mining
-├── ingestion/document_ingester.py  <- PDF / DOCX / MD / HTML ingestion
-├── ml/feature_engineering.py       <- Signal fusion → 17 features per pair
-├── ml/boundary_ranker.py           <- GBT supervised + unsupervised fallback
-├── feedback/feedback_store.py      <- Persistent architect decision store
-├── api/app.py                      <- Flask REST API
-├── ui/review.html                  <- Architectural review UI
-├── docs_input/                     <- Drop documents and traces here
-├── output/                         <- Reports and feedback written here
-└── models/                         <- Trained model saved here
+ml-service-boundary-detector/
+├── cli.py                          CLI: analyze / serve / gen-labels / feedback
+├── config.py                       All tunable parameters
+├── core/
+│   ├── models.py                   Shared dataclasses 
+│   └── pipeline.py                 
+├── signals/
+│   ├── structural.py               AST parsing, TF-IDF, Word2Vec, dependency graph
+│   ├── behavioral.py               Trace parsing, execution order stability
+│   └── evolutionary.py             Git co-change mining, sequence directionality
+├── ingestion/
+│   └── document_ingester.py        PDF / DOCX / Markdown / HTML ingestion
+├── ml/
+│   ├── feature_engineering.py      Signal fusion 
+│   └── boundary_ranker.py          GBT supervised + adaptive unsupervised fallback
+├── feedback/
+│   └── feedback_store.py           Persists architect decisions across runs
+├── api/
+│   └── app.py                      Flask REST API
+├── ui/
+│   └── review.html                 Browser-based review interface
+├── tests/                          Unit tests  behavioral, evolutionary, features
+├── docs_input/                     Drop architecture docs and trace files here
+├── output/                         Reports and feedback stored here
+└── models/                         Trained model persisted here
 ```
+
+---
+
+## CLI Reference
+
+```bash
+python cli.py analyze --help
+python cli.py serve --help
+python cli.py feedback stats
+python cli.py feedback list
+python cli.py feedback import --file output/labels.json
+python cli.py feedback clear
+python cli.py gen-labels          
+```
+
+---
+
+## Supported Languages
+
+Python, Java, JavaScript, TypeScript, Go, C#
+
+Trace log formats: log4j, Python logging, OpenTelemetry CSV, Spring HTTP
