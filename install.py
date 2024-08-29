@@ -46,10 +46,10 @@ def detect_platform():
         platform_id = "linux"
         print("Linux")
 
-    if py_ver < (3, 8):
-        print(f"\n  Python {py_ver[0]}.{py_ver[1]} is too old. Please use Python 3.8+.")
+    if py_ver < (3, 10):
+        print(f"\n  Python {py_ver[0]}.{py_ver[1]} is too old. Please use Python 3.10+.")
         sys.exit(1)
-    if py_ver > (3, 11):
+    if py_ver > (3, 12):
         print(f"  Python {py_ver[0]}.{py_ver[1]} is newer than tested. "
               "Some packages may have minor issues.")
 
@@ -59,20 +59,16 @@ def install_core(platform_id):
     """Install packages that work on all platforms without C compilation issues."""
     pip("pip", "setuptools", "wheel", upgrade=True)
 
-    if platform_id == "mac_arm":
-        pip("numpy>=1.23,<2.0")   
-    else:
-        pip("numpy>=1.21,<2.0")
-
-    pip("scipy>=1.7,<2.0")
-    pip("scikit-learn>=1.0,<2.0")
-    pip("networkx>=2.6")
+    pip("numpy>=1.24,<2.0")
+    pip("scipy>=1.14")
+    pip("scikit-learn>=1.5")
+    pip("networkx>=3.3")
 
     pip(
         "click>=8.0",
-        "flask>=2.0",
-        "flask-restful>=0.3.9",
-        "werkzeug>=2.0",
+        "flask>=3.0",
+        "flask-restful>=0.3.10",
+        "werkzeug>=3.0",
         "tqdm>=4.62",
         "PyYAML>=6.0",
         "loguru>=0.5",
@@ -81,18 +77,12 @@ def install_core(platform_id):
     )
 
 def install_pandas(platform_id, py_ver):
-    """pandas has ARM wheel issues with old pinned versions."""
-    if platform_id == "mac_arm" and py_ver <= (3, 9):
-        pip("pandas>=1.5,<2.0")
-    elif platform_id == "mac_arm":
-        pip("pandas>=1.5,<2.0")
-    else:
-        pip("pandas>=1.3,<2.0")
+    pip("pandas>=2.2")
 
 def install_nlp(platform_id):
     """spaCy + gensim for semantic similarity."""
-    pip("spacy>=3.2,<4.0")
-    pip("gensim>=4.1,<5.0")
+    pip("spacy>=3.7,<4.0")
+    pip("gensim>=4.3,<5.0")
 
     run(
         [sys.executable, "-m", "spacy", "download", "en_core_web_md"],
@@ -118,17 +108,17 @@ def install_hdbscan(platform_id):
         pip("hdbscan")
 
 def install_imbalanced(platform_id):
-    pip("imbalanced-learn>=0.8")
+    pip("imbalanced-learn>=0.12")
 
 def install_java_parsing():
     pip("javalang>=0.13.0")
     pip("lizard>=1.17")
 
 def install_doc_ingestion():
-    pip("pdfminer.six>=20211012")
-    pip("python-docx>=0.8.11")
-    pip("Markdown>=3.3")
-    pip("beautifulsoup4>=4.10")
+    pip("pdfminer.six>=20231228")
+    pip("python-docx>=1.1")
+    pip("Markdown>=3.6")
+    pip("beautifulsoup4>=4.12")
 
 def verify_install():
     print(f"\n{'═'*60}")
