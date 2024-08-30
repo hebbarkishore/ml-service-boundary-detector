@@ -27,7 +27,7 @@ It is a **decision-support tool**, not an automated decomposition engine. An arc
 
 ## Requirements
 
-- Python 3.8 or 3.9
+- Python 3.10, 3.11, or 3.12
 - Git (for evolutionary signal extraction)
 - Java source analysis requires `javalang` (installed automatically)
 
@@ -57,7 +57,7 @@ python install.py --all     # includes Java parsing and document ingestion
 
 | Platform | Known issue | How handled |
 |---|---|---|
-| Apple Silicon | Some packages lack ARM wheels | `install.py` uses `>=` bounds with known-good versions |
+| Apple Silicon | None | Standard install |
 | Windows | `hdbscan` needs a C compiler | `install.py` uses `--only-binary` |
 | Linux | None | Standard install |
 
