@@ -27,7 +27,7 @@ It is a **decision-support tool**, not an automated decomposition engine. An arc
 
 ## Requirements
 
-- Python 3.10, 3.11, or 3.12
+- Python 3.11, 3.12, or 3.13
 - Git (for evolutionary signal extraction)
 - Java source analysis requires `javalang` (installed automatically)
 
