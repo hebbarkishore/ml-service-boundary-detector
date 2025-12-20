@@ -45,7 +45,7 @@ def health():
     return jsonify({
         "status":           "ok",
         "service":          "ServiceBoundaryDetector",
-        "version":          "2.1.0",
+        "version":          "2.2.0",
         "feedback_stats":   _feedback_store.stats(),
         "model_trained":    model_path.exists(),
         "ui_url":           f"http://{API_HOST}:{API_PORT}/",

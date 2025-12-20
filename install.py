@@ -46,10 +46,10 @@ def detect_platform():
         platform_id = "linux"
         print("Linux")
 
-    if py_ver < (3, 10):
-        print(f"\n  Python {py_ver[0]}.{py_ver[1]} is too old. Please use Python 3.10+.")
+    if py_ver < (3, 11):
+        print(f"\n  Python {py_ver[0]}.{py_ver[1]} is too old. Please use Python 3.11+.")
         sys.exit(1)
-    if py_ver > (3, 12):
+    if py_ver > (3, 13):
         print(f"  Python {py_ver[0]}.{py_ver[1]} is newer than tested. "
               "Some packages may have minor issues.")
 
@@ -59,9 +59,9 @@ def install_core(platform_id):
     """Install packages that work on all platforms without C compilation issues."""
     pip("pip", "setuptools", "wheel", upgrade=True)
 
-    pip("numpy>=1.24,<2.0")
-    pip("scipy>=1.14")
-    pip("scikit-learn>=1.5")
+    pip("numpy>=2.0")
+    pip("scipy>=1.16")
+    pip("scikit-learn>=1.7")
     pip("networkx>=3.3")
 
     pip(
@@ -81,8 +81,8 @@ def install_pandas(platform_id, py_ver):
 
 def install_nlp(platform_id):
     """spaCy + gensim for semantic similarity."""
-    pip("spacy>=3.7,<4.0")
-    pip("gensim>=4.3,<5.0")
+    pip("spacy>=3.8,<4.0")
+    pip("gensim>=4.4,<5.0")
 
     run(
         [sys.executable, "-m", "spacy", "download", "en_core_web_md"],
@@ -108,7 +108,7 @@ def install_hdbscan(platform_id):
         pip("hdbscan")
 
 def install_imbalanced(platform_id):
-    pip("imbalanced-learn>=0.12")
+    pip("imbalanced-learn>=0.14")
 
 def install_java_parsing():
     pip("javalang>=0.13.0")

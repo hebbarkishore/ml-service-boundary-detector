@@ -1,42 +1,42 @@
-scikit-learn==1.5.1
-numpy==1.26.4
-scipy==1.14.0
-pandas==2.2.2
-hdbscan==0.8.33
-imbalanced-learn==0.12.3
+scikit-learn==1.7.2
+numpy==2.3.5
+scipy==1.16.3
+pandas==2.3.3
+hdbscan==0.8.40
+imbalanced-learn==0.14.0
 
-spacy==3.7.4
-gensim==4.3.2
+spacy==3.8.11
+gensim==4.4.0
 
 # ── Code Parsing
 javalang==0.13.0
-astroid==3.2.4
+astroid==4.0.2
 lizard==1.17.9
 
 # ── Graph Analysis
-networkx==3.3
+networkx==3.6
 
 # ── Version Control (evolutionary signals)
-gitpython==3.1.43
+gitpython==3.1.45
 
 # ── Document Ingestion
-pdfminer.six==20231228
-python-docx==1.1.0
-Markdown==3.6
-beautifulsoup4==4.12.3
+pdfminer.six==20251107
+python-docx==1.2.0
+Markdown==3.10
+beautifulsoup4==4.14.3
 
 # ── API / Serving
-Flask==3.0.3
+Flask==3.1.2
 Flask-RESTful==0.3.10
-Werkzeug==3.0.3
+Werkzeug==3.1.4
 
 # ── Visualisation / Reports
-matplotlib==3.9.1
-plotly==5.22.0
-jinja2==3.1.4
+matplotlib==3.10.7
+plotly==6.5.0
+jinja2==3.1.6
 
 # ── Utilities
-tqdm==4.66.4
-PyYAML==6.0.1
-click==8.1.7
-loguru==0.7.2
+tqdm==4.67.1
+PyYAML==6.0.3
+click==8.3.1
+loguru==0.7.3
